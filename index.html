@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Империя Востока 3D — модели подключены</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--gold:#ffd66b;--gold-2:#c8960c;--bg1:rgba(18,12,7,.94);--bg2:rgba(42,29,15,.90);--panel-border:rgba(200,150,50,.45);--panel-shadow:0 14px 40px rgba(0,0,0,.55);--text:#f4e1a8;--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px)}
+    *{box-sizing:border-box;margin:0;padding:0} html,body{width:100%;height:100%;overflow:hidden;background:#000;color:var(--text);font-family:'Roboto',sans-serif;touch-action:none;-webkit-user-select:none;user-select:none} canvas{display:block}
+    #ui-root{position:fixed;inset:0;pointer-events:none;z-index:10} .panel{pointer-events:auto;background:linear-gradient(135deg,var(--bg1),var(--bg2));backdrop-filter:blur(12px);border:1.5px solid var(--panel-border);box-shadow:var(--panel-shadow);border-radius:20px}
+    #top-bar{position:absolute;top:calc(10px + var(--safe-top));left:50%;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:8px 12px;padding:10px 16px;max-width:min(96vw,1120px);z-index:20}
+    .res-item{display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap}.res-icon{font-size:18px}.res-value{font-weight:700;color:#ffe592;min-width:28px;text-align:center}.small-note{font-size:11px;color:#c5b27a}
+    #bottom-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(12px + var(--safe-bottom));display:flex;flex-wrap:wrap;gap:8px;justify-content:center;z-index:22;max-width:96vw}.control-btn,.build-btn,.tab-btn{pointer-events:auto;border:1px solid rgba(255,214,107,.35);border-radius:14px;background:linear-gradient(135deg,rgba(85,53,13,.85),rgba(49,33,13,.98));color:var(--text);padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}.control-btn{width:auto;padding:12px 15px}.build-btn{width:100%;display:flex;gap:10px;align-items:flex-start;justify-content:flex-start}.build-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+    #context-panel{position:absolute;bottom:0;left:50%;transform:translateX(-50%) translateY(120%);width:min(100%,700px);max-height:70vh;overflow-y:auto;padding:18px 14px calc(20px + var(--safe-bottom));border-bottom-left-radius:0;border-bottom-right-radius:0;transition:transform .35s cubic-bezier(.175,.885,.32,1.275);display:flex;flex-direction:column;gap:10px;z-index:30}.visible{transform:translateX(-50%) translateY(0)!important}
+    .context-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,214,107,.16);padding-bottom:8px;margin-bottom:8px}.section-title{font-family:'Cinzel',serif;font-size:18px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold)}.close-btn{background:none;border:none;color:var(--gold);font-size:24px;cursor:pointer;padding:0 10px}
+    .cost{font-size:11px;color:#f1d48d}.btn-main-text{display:flex;flex-direction:column;align-items:flex-start;gap:2px;flex:1;text-align:left}.btn-sub{font-size:11px;color:#d1bf89;font-weight:400;line-height:1.25}
+    #loading-screen{position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at 50% 35%,#3c2408,#0c0a09 70%);display:flex;flex-direction:column;justify-content:center;align-items:center;color:#ffe592}#loading-screen h1{font-family:'Cinzel',serif;font-size:clamp(28px,5vw,48px);letter-spacing:.08em;text-align:center}.loading-bar{margin-top:18px;width:min(80vw,460px);height:12px;border-radius:999px;border:1px solid rgba(255,214,107,.4);overflow:hidden;background:rgba(255,255,255,.06)}.loading-fill{height:100%;width:0;background:linear-gradient(90deg,#8b5b0e,#ffd66b,#fff0b8);transition:width .35s}#loading-text{margin-top:12px;font-size:14px;color:#e9d59d}
+    #notifications{position:absolute;top:calc(110px + var(--safe-top));left:50%;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}.notification{background:rgba(27,17,9,.95);border:1px solid rgba(255,214,107,.6);color:#ffe592;padding:10px 14px;border-radius:12px;box-shadow:0 8px 26px rgba(0,0,0,.4);font-size:13px;animation:fadeSlide 3.4s ease forwards}@keyframes fadeSlide{0%{opacity:0;transform:translateY(-10px)}10%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateY(-6px)}}
+    #hint{position:absolute;right:12px;top:calc(84px + var(--safe-top));width:min(340px,46vw);padding:12px 14px;z-index:22;font-size:12px;line-height:1.45}
+    @media (max-width:900px){#hint{display:none}#top-bar{max-width:92vw;gap:6px 8px;padding:8px 10px}.res-item{font-size:11px}.res-icon{font-size:14px}}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="loading-screen">
+    <h1>⚔️ Империя Востока 3D</h1>
+    <div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div>
+    <div id="loading-text">Загрузка моделей и мира…</div>
+  </div>
+  <div id="ui-root">
+    <div id="notifications"></div>
+    <div id="top-bar" class="panel">
+      <div class="res-item"><span class="res-icon">💰</span><span class="res-value" id="res-gold">120</span><span class="small-note">Золото</span></div>
+      <div class="res-item"><span class="res-icon">🌾</span><span class="res-value" id="res-food">90</span><span class="small-note">Еда</span></div>
+      <div class="res-item"><span class="res-icon">🪵</span><span class="res-value" id="res-wood">70</span><span class="small-note">Дерево</span></div>
+      <div class="res-item"><span class="res-icon">🪨</span><span class="res-value" id="res-stone">45</span><span class="small-note">Камень</span></div>
+      <div class="res-item"><span class="res-icon">⚔️</span><span class="res-value" id="res-army">24</span><span class="small-note">Армия</span></div>
+      <div class="res-item"><span class="res-icon">👑</span><span class="res-value" id="res-prestige">12</span><span class="small-note">Престиж</span></div>
+      <div class="res-item"><span class="res-icon">📅</span><span class="res-value" id="res-turn">1</span><span class="small-note">Год</span></div>
+    </div>
+    <div id="hint" class="panel">Нажми на клетку внутри золотого круга, чтобы строить. В этом варианте здания ставятся уже как <b>.glb-модели</b> из твоего архива. Пути к файлам ожидаются в <b>assets/models/buildings/</b>.</div>
+    <div id="context-panel" class="panel">
+      <div class="context-header"><div class="section-title" id="context-title">Строительство</div><button class="close-btn" id="context-close">✖</button></div>
+      <div id="context-desc" class="btn-sub"></div>
+      <div id="context-content"></div>
+    </div>
+    <div id="bottom-bar">
+      <button class="control-btn" id="camera-home">🏰 Столица</button>
+      <button class="control-btn" id="open-rules">❔ Правила</button>
+      <button class="control-btn" id="end-turn-btn">⏩ Ход</button>
+    </div>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const $ = (s) => document.querySelector(s);
+    const notify = (msg) => { const el = document.createElement('div'); el.className='notification'; el.textContent=msg; $('#notifications').appendChild(el); setTimeout(()=>el.remove(),3400); };
+    const setLoading = (p,t)=>{ $('#loading-fill').style.width=p+'%'; $('#loading-text').textContent=t; };
+    const fmtCost = (cost)=>Object.entries(cost).map(([k,v])=>`${v}${({gold:'💰',food:'🌾',wood:'🪵',stone:'🪨'})[k]||k}`).join(' ');
+
+    const STATE = { gold:120, food:90, wood:70, stone:45, army:24, prestige:12, turn:1, territoryRadius:12.8, tiles:[], buildings:[], selectedTile:null };
+    const BUILDING_TYPES = {
+      capital:{ name:'Столица', icon:'🏰', cost:null, scale:0.9 },
+      farm:{ name:'Ферма', icon:'🌾', cost:{gold:25,wood:8}, scale:0.75 },
+      lumber:{ name:'Лесопилка', icon:'🪓', cost:{gold:20,food:10}, scale:0.75 },
+      mine:{ name:'Шахта', icon:'⛏️', cost:{gold:30,wood:15}, scale:0.8 },
+      market:{ name:'Рынок', icon:'🛍️', cost:{gold:45,wood:12}, scale:0.8 },
+      barracks:{ name:'Казармы', icon:'⚔️', cost:{gold:55,stone:15}, scale:0.85 },
+      wall:{ name:'Каменная стена', icon:'🧱', cost:{stone:25,wood:12}, scale:0.7 },
+      temple:{ name:'Храм', icon:'🏛️', cost:{gold:90,stone:40}, scale:0.85 },
+      granary:{ name:'Амбар', icon:'🏺', cost:{gold:35,wood:16}, scale:0.75 },
+      academy:{ name:'Академия', icon:'📚', cost:{gold:95,wood:18,stone:32}, scale:0.8 },
+      harbor:{ name:'Порт', icon:'⚓', cost:{gold:85,wood:22,stone:20}, scale:0.85 },
+      wonder:{ name:'Чудо света', icon:'✨', cost:{gold:180,stone:120,wood:40}, scale:1.0 }
+    };
+
+    const MODEL_PATHS = {
+      capital:[
+        './assets/models/buildings/town-center.glb?v=2',
+        './assets/models/buildings/Town Center.glb'
+      ],
+      farm:[
+        './assets/models/buildings/farm.glb?v=2',
+        './assets/models/buildings/Farm.glb'
+      ],
+      lumber:[
+        './assets/models/buildings/storage-shed.glb?v=2',
+        './assets/models/buildings/Storage Shed.glb'
+      ],
+      mine:[
+        './assets/models/buildings/mine.glb?v=2',
+        './assets/models/buildings/Mine.glb'
+      ],
+      market:[
+        './assets/models/buildings/market-stalls.glb?v=2',
+        './assets/models/buildings/Market Stalls.glb'
+      ],
+      barracks:[
+        './assets/models/buildings/barracks.glb?v=2',
+        './assets/models/buildings/Barracks.glb'
+      ],
+      wall:[
+        './assets/models/buildings/stone-wall.glb?v=2',
+        './assets/models/buildings/Stone Wall.glb'
+      ],
+      temple:[
+        './assets/models/buildings/temple.glb?v=2',
+        './assets/models/buildings/Temple.glb'
+      ],
+      granary:[
+        './assets/models/buildings/storage-house.glb?v=2',
+        './assets/models/buildings/Storage House.glb'
+      ],
+      academy:[
+        './assets/models/buildings/academy.glb?v=2',
+        './assets/models/buildings/Temple First Age Leve.glb'
+      ],
+      harbor:[
+        './assets/models/buildings/port.glb?v=2',
+        './assets/models/buildings/Port.glb'
+      ],
+      wonder:[
+        './assets/models/buildings/wonder.glb?v=2',
+        './assets/models/buildings/Wonder First Age Leve.glb'
+      ]
+    };
+
+    const TERRAIN = { water:0x4a7bb3, grass:0x74ab50, fertile:0x9ccf66, forest:0x386b2c, hill:0x958058, rock:0x818181, river:0x72a9d7 };
+    const scene = new THREE.Scene();
+    const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8)); renderer.setSize(innerWidth, innerHeight); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; document.body.appendChild(renderer.domElement);
+    const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 700); camera.position.set(18,28,24);
+    const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.enablePan = false; controls.maxPolarAngle = Math.PI/2.08; controls.minDistance = 10; controls.maxDistance = 66;
+
+    const hemi = new THREE.HemisphereLight(0xddeeff, 0x5d3e16, .9); scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffefcc, 1.35); sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-60; sun.shadow.camera.right=60; sun.shadow.camera.top=60; sun.shadow.camera.bottom=-60; sun.position.set(26,34,8); scene.add(sun);
+    const groundGroup = new THREE.Group(); const buildGroup = new THREE.Group(); scene.add(groundGroup, buildGroup);
+
+    const ringGeom = new THREE.BufferGeometry().setFromPoints(Array.from({length:72},(_,i)=>{ const a=i/72*Math.PI*2; return new THREE.Vector3(Math.cos(a)*STATE.territoryRadius,.08,Math.sin(a)*STATE.territoryRadius)}));
+    const ring = new THREE.LineLoop(ringGeom, new THREE.LineBasicMaterial({ color:0xffd66b, transparent:true, opacity:.4 })); scene.add(ring);
+
+    const gltfLoader = new GLTFLoader();
+    const modelCache = new Map();
+    async function loadBuildingAsset(type){
+      const candidates = Array.isArray(MODEL_PATHS[type]) ? MODEL_PATHS[type] : [MODEL_PATHS[type]];
+      if(!candidates || !candidates.length) return null;
+      if(modelCache.has(type)) return modelCache.get(type).clone(true);
+
+      let lastError = null;
+      for(const path of candidates){
+        try {
+          const gltf = await gltfLoader.loadAsync(path);
+          const root = gltf.scene;
+          root.traverse(obj=>{
+            if(obj.isMesh){
+              obj.castShadow = true;
+              obj.receiveShadow = true;
+              if(obj.material){ obj.material.side = THREE.DoubleSide; }
+            }
+          });
+          modelCache.set(type, root);
+          return root.clone(true);
+        } catch(err){
+          lastError = err;
+          console.warn('Model candidate failed:', type, path, err);
+        }
+      }
+      throw new Error(`Не удалось загрузить модель ${type}. Проверены пути: ${candidates.join(' | ')}. Последняя ошибка: ${lastError?.message || lastError}`);
+    }
+
+    function normalizeModel(root, targetScale=1){
+      const box = new THREE.Box3().setFromObject(root);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const maxSide = Math.max(size.x, size.y, size.z) || 1;
+      const k = targetScale / maxSide;
+      root.scale.setScalar(k);
+      const box2 = new THREE.Box3().setFromObject(root);
+      const center = new THREE.Vector3(); box2.getCenter(center);
+      root.position.x -= center.x;
+      root.position.z -= center.z;
+      root.position.y -= box2.min.y;
+      return root;
+    }
+
+    function updateUI(){ ['gold','food','wood','stone','army','prestige','turn'].forEach(k=>$('#res-'+k).textContent=Math.round(STATE[k])); }
+    function hasResources(cost){ return Object.entries(cost).every(([k,v]) => STATE[k] >= v); }
+    function payCost(cost){ Object.entries(cost).forEach(([k,v]) => STATE[k] -= v); }
+    function gain(cost){ Object.entries(cost).forEach(([k,v]) => STATE[k] += v); }
+
+    function axialToWorld(q, r, size=1.45){ return new THREE.Vector3(size * Math.sqrt(3) * (q + r/2), 0, size * 1.5 * r); }
+    function createHexShape(size=1.35){ const s=new THREE.Shape(); for(let i=0;i<6;i++){ const a=Math.PI/3*i+Math.PI/6; const x=Math.cos(a)*size, y=Math.sin(a)*size; if(i===0)s.moveTo(x,y); else s.lineTo(x,y);} s.closePath(); return s; }
+
+    function generateWorld(){
+      const radius = 8; const hexShape = createHexShape();
+      for(let q=-radius;q<=radius;q++){
+        for(let r=-radius;r<=radius;r++){
+          const s=-q-r; if(Math.max(Math.abs(q),Math.abs(r),Math.abs(s))>radius) continue;
+          const pos = axialToWorld(q,r); const d = Math.hypot(pos.x,pos.z);
+          let type='grass';
+          if(Math.abs(q+r*0.65)<1.1 && d<18) type='river';
+          else if(d>16.5 && ((q+r)%3===0)) type='water';
+          else if((q*r)%7===0) type='forest';
+          else if((q-r)%5===0) type='hill';
+          else if((q+r)%6===0) type='rock';
+          else if((q+r)%4===0) type='fertile';
+          const geo = new THREE.ExtrudeGeometry(hexShape,{depth:.55, bevelEnabled:false}); geo.rotateX(-Math.PI/2); geo.translate(pos.x, type==='water' ? -0.55 : -0.1, pos.z);
+          const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color:TERRAIN[type], roughness:type==='river'?0.5:0.95, metalness:type==='water'?0.2:0 }));
+          mesh.receiveShadow = true; groundGroup.add(mesh);
+          STATE.tiles.push({ q,r,key:`${q},${r}`, pos, type, mesh, building:null });
+        }
+      }
+    }
+
+    function selectCapitalTile(){ return STATE.tiles.filter(t=>t.type!=='water').sort((a,b)=>a.pos.length()-b.pos.length())[0]; }
+
+    async function createEntity(type, tile){
+      const cfg = BUILDING_TYPES[type];
+      let group = new THREE.Group();
+      try {
+        const model = await loadBuildingAsset(type);
+        if(model){
+          normalizeModel(model, cfg.scale * 2.6);
+          group.add(model);
+        }
+      } catch(err){
+        console.error('Model load failed:', type, err);
+        const fallback = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({ color:0xaa8844 }));
+        fallback.castShadow = true; fallback.receiveShadow = true; group.add(fallback);
+        notify(`Не загрузилась модель ${type}. Открой консоль и проверь точный путь.`);
+      }
+      const ring = new THREE.Mesh(new THREE.RingGeometry(1.15,1.42,32), new THREE.MeshBasicMaterial({ color:0xffd66b, transparent:true, opacity:0, side:THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI/2; ring.position.y = .04; group.add(ring); group.userData.selectionRing = ring;
+      group.position.copy(tile.pos); group.position.y += .12;
+      buildGroup.add(group);
+      const entity = { type, tile, mesh:group };
+      tile.building = entity; STATE.buildings.push(entity);
+      return entity;
+    }
+
+    async function createCapital(){ await createEntity('capital', selectCapitalTile()); }
+
+    function openRules(){ alert('Положи .glb в assets/models/buildings/. Нажми на клетку — выбери строение — модель загрузится вместо примитивов.'); }
+    function closeContext(){ $('#context-panel').classList.remove('visible'); STATE.buildings.forEach(b=>b.mesh.userData.selectionRing.material.opacity=0); }
+    $('#context-close').onclick = closeContext;
+
+    function openTileMenu(tile){
+      STATE.selectedTile = tile;
+      STATE.buildings.forEach(b=>b.mesh.userData.selectionRing.material.opacity=0);
+      if(tile.building){
+        tile.building.mesh.userData.selectionRing.material.opacity=.6;
+        $('#context-title').textContent = BUILDING_TYPES[tile.building.type].name;
+        $('#context-desc').textContent = `На этой клетке уже стоит: ${BUILDING_TYPES[tile.building.type].name}`;
+        $('#context-content').innerHTML = '<div class="btn-sub">Выбери другую свободную клетку для строительства.</div>';
+      } else {
+        $('#context-title').textContent = 'Строительство';
+        $('#context-desc').textContent = `Клетка: ${tile.type}. Выбери, что построить.`;
+        const grid = document.createElement('div'); grid.className='build-grid';
+        Object.entries(BUILDING_TYPES).forEach(([type,cfg])=>{
+          if(type==='capital') return;
+          const btn = document.createElement('button'); btn.className='build-btn';
+          btn.innerHTML = `<span>${cfg.icon}</span><span class="btn-main-text"><span>${cfg.name}</span><span class="btn-sub">Модель: ${(Array.isArray(MODEL_PATHS[type]) ? MODEL_PATHS[type][0] : MODEL_PATHS[type]).split('/').pop()}</span></span><span class="cost">${fmtCost(cfg.cost)}</span>`;
+          btn.onclick = async ()=>{
+            if(!hasResources(cfg.cost)) return notify('Недостаточно ресурсов');
+            payCost(cfg.cost); updateUI(); closeContext();
+            await createEntity(type, tile);
+            notify(`Построено: ${cfg.name}`);
+          };
+          grid.appendChild(btn);
+        });
+        const wrap = $('#context-content'); wrap.innerHTML=''; wrap.appendChild(grid);
+      }
+      $('#context-panel').classList.add('visible');
+    }
+
+    const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); let pointerDownPos={x:0,y:0};
+    addEventListener('pointerdown',(e)=>{ pointerDownPos={x:e.clientX,y:e.clientY}; });
+    addEventListener('pointerup',(e)=>{
+      if(e.target.closest('.panel,button')) return;
+      const dist = Math.hypot(e.clientX-pointerDownPos.x,e.clientY-pointerDownPos.y); if(dist>8) return;
+      pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=-(e.clientY/innerHeight)*2+1; raycaster.setFromCamera(pointer,camera);
+      const hit = raycaster.intersectObjects(STATE.tiles.map(t=>t.mesh))[0]; if(!hit) return closeContext();
+      const tile = STATE.tiles.find(t=>t.mesh===hit.object); if(tile && tile.type!=='water' && tile.pos.length()<=STATE.territoryRadius+2) openTileMenu(tile); else closeContext();
+    });
+
+    $('#camera-home').onclick = ()=>{ controls.target.set(0,0,0); camera.position.set(18,28,24); closeContext(); };
+    $('#open-rules').onclick = openRules;
+    $('#end-turn-btn').onclick = ()=>{ STATE.turn += 1; gain({ gold:12, food:10, wood:8, stone:5 }); updateUI(); notify('Новый ход: ресурсы пополнены'); };
+    addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+    async function bootstrap(){
+      setLoading(15,'Создание карты…'); generateWorld();
+      setLoading(40,'Подготовка столицы…'); await createCapital();
+      setLoading(65,'Предзагрузка моделей…');
+      const preload = ['farm','market','barracks','temple'];
+      for(let i=0;i<preload.length;i++){ try{ await loadBuildingAsset(preload[i]); }catch(e){ console.warn(e); } setLoading(65 + ((i+1)/preload.length)*25, `Загрузка: ${preload[i]}`); }
+      updateUI(); setLoading(100,'Готово'); setTimeout(()=>$('#loading-screen').style.display='none',350);
+    }
+
+    function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); }
+    bootstrap(); animate();
+  </script>
+</body>
+</html>
