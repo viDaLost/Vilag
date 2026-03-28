@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
 import { getModelCandidates } from '../data/modelPaths.js';
 
 const loader = new GLTFLoader();
@@ -41,8 +40,8 @@ function prepareScene(scene) {
 }
 
 function cloneUnitAsset(entry) {
-  const scene = SkeletonUtils.clone(entry.scene);
-  const animations = entry.animations.map((clip) => clip.clone());
+  const scene = entry.scene.clone(true);
+  const animations = [];
   prepareScene(scene);
   return { scene, animations };
 }
