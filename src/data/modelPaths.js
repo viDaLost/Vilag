@@ -1,16 +1,21 @@
-export const MODEL_ROOT = './assets/models/buildings/';
+export const MODEL_ROOTS = {
+  buildings: './assets/models/buildings/',
+  decor: './assets/models/decor/',
+  units: './assets/models/units/'
+};
 
-export function getModelCandidates(filename) {
+export function getModelCandidates(filename, root = 'buildings') {
   if (!filename) return [];
-  const base = `${MODEL_ROOT}${filename}`;
+  const dir = MODEL_ROOTS[root] || MODEL_ROOTS.buildings;
+  const base = `${dir}${filename}`;
   const named = filename
     .replaceAll('-', ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-  const legacy = `${MODEL_ROOT}${named}`;
+    .replace(/\w/g, (c) => c.toUpperCase());
+  const legacy = `${dir}${named}`;
   return [
-    `${base}?v=4`,
+    `${base}?v=7`,
     base,
-    `${legacy}?v=4`,
+    `${legacy}?v=7`,
     legacy,
   ];
 }
