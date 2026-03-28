@@ -336,53 +336,110 @@ body { touch-action: manipulation; }
 
 @media (max-width: 899px) {
   #top-bar {
-    width: min(96vw, 700px);
+    width: calc(100vw - 14px);
+    left: 7px;
+    transform: none;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    padding: 8px;
+    padding: 7px;
+    gap: 6px;
+    top: calc(6px + var(--safe-top));
+    border-radius: 18px;
   }
-  .res-card { min-height: 58px; padding: 8px; }
-  .res-icon { font-size: 18px; }
-  .res-value { font-size: 14px; }
-  #hud-strip { top: calc(146px + var(--safe-top)); width: min(96vw, 700px); }
-  .mini-panel { min-height: 48px; font-size: 12px; }
+  .res-card { min-height: 50px; padding: 7px 8px; border-radius: 14px; }
+  .res-icon { font-size: 17px; }
+  .res-value { font-size: 13px; }
+  .res-label { font-size: 10px; }
+  #hud-strip {
+    top: calc(124px + var(--safe-top));
+    width: calc(100vw - 14px);
+    left: 7px;
+    transform: none;
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+  .info-card { padding: 11px 12px; }
+  .panel-title { font-size: 14px; margin-bottom: 5px; }
+  .badge { padding: 5px 9px; font-size: 11px; }
+  .status-cluster { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 7px; }
+  .mini-panel { min-height: 42px; font-size: 11px; border-radius: 14px; }
   #side-panels { display: none; }
   #bottom-dock {
-    width: min(96vw, 700px);
+    width: calc(100vw - 14px);
+    left: 7px;
+    transform: none;
     grid-template-columns: 1fr;
     gap: 8px;
     padding: 8px;
-    bottom: calc(8px + var(--safe-bottom));
+    bottom: calc(6px + var(--safe-bottom));
+    border-radius: 20px;
   }
-  #bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .action-btn.wide { grid-column: span 2; }
-  #speed-controls { justify-content: flex-end; }
-  .speed-btn { min-width: 62px; }
+  .action-btn, .speed-btn { min-height: 50px; padding: 11px 10px; border-radius: 16px; }
+  #speed-controls { justify-content: stretch; display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:8px; }
+  .speed-btn { min-width: 0; width: 100%; }
   #context-drawer {
-    left: 50%;
-    right: auto;
+    position: fixed;
+    left: 7px;
+    right: 7px;
+    width: auto;
     top: auto;
-    bottom: calc(128px + var(--safe-bottom));
-    transform: translateX(-50%);
-    width: min(96vw, 720px);
-    max-height: min(46vh, 420px);
+    bottom: calc(10px + var(--safe-bottom));
+    transform: none;
+    max-height: min(48vh, 430px);
     border-radius: 22px;
-    padding: 14px;
+    padding: 12px;
+    z-index: 40;
   }
-  .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #notifications { top: calc(254px + var(--safe-top)); }
+  #notifications { top: calc(274px + var(--safe-top)); left: 50%; transform: translateX(-50%); width: calc(100vw - 40px); }
 }
 
 @media (max-width: 560px) {
-  #top-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #hud-strip { top: calc(278px + var(--safe-top)); }
-  .status-cluster { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .action-btn { min-height: 54px; padding: 12px 10px; }
-  #context-drawer {
-    bottom: calc(118px + var(--safe-bottom));
-    max-height: min(42vh, 360px);
-    padding: 12px;
+  #top-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    padding: 6px;
   }
-  .card-grid, .quick-grid { grid-template-columns: 1fr; }
-  #modal-window { width: min(94vw, 560px); }
+  .res-card {
+    min-height: 45px;
+    padding: 6px 7px;
+    gap: 6px;
+  }
+  .res-icon { font-size: 15px; }
+  .res-value { font-size: 12px; }
+  .res-label { font-size: 9px; }
+  #hud-strip { top: calc(108px + var(--safe-top)); gap: 6px; }
+  .info-card { padding: 10px 11px; }
+  #kingdom-text, #selection-content, #objectives-list { font-size: 12px; line-height: 1.35; }
+  .panel-title { font-size: 13px; }
+  .status-cluster { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px; }
+  .mini-panel { min-height: 38px; font-size: 10px; padding: 0 4px; }
+  #bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .action-btn {
+    min-height: 46px;
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+  .action-btn.wide { grid-column: span 2; }
+  #bottom-dock { padding: 7px; gap: 7px; }
+  #context-drawer {
+    left: 6px;
+    right: 6px;
+    bottom: calc(6px + var(--safe-bottom));
+    max-height: min(54vh, 480px);
+    padding: 10px;
+  }
+  .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .card-btn { padding: 11px 10px; font-size: 13px; border-radius: 16px; }
+  .card-btn small { font-size: 11px; }
+  .drawer-header { margin-bottom: 8px; }
+  .drawer-subtitle { font-size: 11px; }
+  #modal-window { width: calc(100vw - 12px); max-height: 78vh; }
+  #notifications { top: calc(230px + var(--safe-top)); width: calc(100vw - 24px); }
+  .construction-timer {
+    padding: 5px 8px;
+    font-size: 11px;
+    border-radius: 999px;
+  }
 }
