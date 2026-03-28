@@ -32,6 +32,16 @@ function setLoading(percent, text) {
 }
 
 async function bootstrap() {
+  let loadingReleased = false;
+  const releaseLoading = () => {
+    if (loadingReleased) return;
+    loadingReleased = true;
+    $('#loading-screen').style.display = 'none';
+    state.timeScale = 1;
+    setSpeedButton(1);
+    showRules();
+    animate();
+  };
   setupHud();
   setupModal();
   bindDrawerClose();
@@ -64,11 +74,7 @@ async function bootstrap() {
 
   setLoading(100, 'Готово');
   setTimeout(() => {
-    $('#loading-screen').style.display = 'none';
-    state.timeScale = 1;
-    setSpeedButton(1);
-    showRules();
-    animate();
+    releaseLoading();
     queueMicrotask(async () => {
       try {
         await populateDecorModels(sceneCtx, state);
@@ -84,6 +90,13 @@ async function bootstrap() {
     refreshConstructionOverlays();
   });
 }
+
+setTimeout(() => {
+  if ($('#loading-screen')?.style.display !== 'none') {
+    setLoading(96, 'Почти готово… запускаем мир');
+    try { releaseLoading(); } catch {}
+  }
+}, 4500);
 
 async function spawnCapital() {
   const center = state.map.filter((t) => t.type !== 'water').sort((a, b) => Math.hypot(a.pos.x, a.pos.z) - Math.hypot(b.pos.x, b.pos.z))[0];
@@ -660,4 +673,14 @@ async function animate(now = performance.now()) {
   sceneCtx.composer.render();
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('Bootstrap failed', err);
+  try {
+    $('#loading-text').textContent = 'Мир запущен в безопасном режиме';
+    $('#loading-screen').style.display = 'none';
+    state.timeScale = 1;
+    setSpeedButton(1);
+    animate();
+    notify('Часть моделей не загрузилась, но игра запущена');
+  } catch {}
+});
