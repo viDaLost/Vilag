@@ -10,7 +10,7 @@ export function getModelCandidates(filename, root = 'buildings') {
   const dir = MODEL_ROOTS[root] || MODEL_ROOTS.buildings;
   const base = `${dir}${filename}`;
   return [
-    `${base}?v=11`,
+    `${base}?v=13`,
     base,
   ];
 }
