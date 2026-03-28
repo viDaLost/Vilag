@@ -71,9 +71,9 @@ function setupMixer(group, model, animations, type) {
   const clips = {
     idle: findClip(animations, ['idle']),
     walk: findClip(animations, ['walk', 'run']),
-    attack: findClip(animations, ['attack', 'shoot', 'staff_attack', 'sword_attack', 'dagger_attack', 'spell', 'bow_shoot']),
-    hit: findClip(animations, ['recievehit', 'receivehit', 'hit']),
-    death: findClip(animations, ['death'])
+    attack: findClip(animations, ['attack', 'shoot', 'staff_attack', 'sword_attack', 'dagger_attack', 'spell', 'bow_shoot', 'slash', 'strike', 'fire', 'punch']),
+    hit: findClip(animations, ['recievehit', 'receivehit', 'hit', 'damage']),
+    death: findClip(animations, ['death', 'die', 'fall'])
   };
   const actions = {};
   Object.entries(clips).forEach(([k, clip]) => {
@@ -201,7 +201,6 @@ export function queueTraining(building, type) {
 }
 
 export function updateTraining(sceneCtx, state, dt, notify) {
-  // Защита от всплесков времени при загрузке 3D моделей
   dt = Math.min(dt, 0.1); 
 
   for (const building of state.buildings) {
@@ -274,7 +273,6 @@ function cleanupDeadUnit(sceneCtx, state, unit, index) {
   if (!unit.hostile) state.stats.armyUnits = state.units.filter((u) => !u.hostile && u.type !== 'worker').length;
 }
 
-
 function buildingTargetsFor(unit, state) {
   if (unit.hostile) return [];
   const filtered = state.buildings.filter((b) => !['wall'].includes(b.type));
@@ -298,11 +296,11 @@ function chooseNewBuildingTask(unit, state) {
 }
 
 export function updateUnits(sceneCtx, state, dt, notify) {
-  // Защита от всплесков времени
   dt = Math.min(dt, 0.1);
 
   const capital = getCapital(state);
   const capitalTile = capital ? state.mapIndex.get(capital.tileId) : null;
+  
   for (let i = state.units.length - 1; i >= 0; i--) {
     const unit = state.units[i];
     const vis = UNIT_VISUALS[unit.type] || UNIT_VISUALS.militia;
@@ -312,10 +310,13 @@ export function updateUnits(sceneCtx, state, dt, notify) {
 
     let targetPos = null;
     let moved = false;
+    let attackTarget = null; 
+
     if (unit.hostile) {
       const { best: defender, bestD } = nearestTarget(unit, state, (u) => !u.hostile && u.type !== 'worker', unit.range > 2 ? 8 : 6);
       if (defender) {
         targetPos = defender.pos;
+        attackTarget = defender;
         if (bestD <= unit.range + .35 && unit.attackCooldown <= 0) {
           defender.hp -= unit.attack;
           defender.hitFlash = .18;
@@ -332,6 +333,7 @@ export function updateUnits(sceneCtx, state, dt, notify) {
       const { best: enemy, bestD } = nearestTarget(unit, state, (u) => u.hostile, 8);
       if (enemy) {
         targetPos = enemy.pos;
+        attackTarget = enemy;
         if (bestD <= unit.range + .35 && unit.attackCooldown <= 0) {
           enemy.hp -= unit.attack;
           enemy.hitFlash = .18;
@@ -378,16 +380,23 @@ export function updateUnits(sceneCtx, state, dt, notify) {
       const dir = new THREE.Vector3().subVectors(targetPos, unit.pos);
       dir.y = 0;
       const len = dir.length();
-      if (len > .18) {
+      
+      const stopDistance = attackTarget ? Math.max(unit.range * 0.8, 0.25) : 0.18;
+
+      if (len > stopDistance) {
         dir.normalize();
         unit.pos.addScaledVector(dir, unit.speed * dt);
-        const desiredYaw = Math.atan2(dir.x, dir.z) + (unit.mesh.userData.facingOffset || 0);
+        moved = true;
+        unit.stepPhase += dt * unit.speed * vis.bobSpeed;
+      }
+      
+      if (len > 0.05) {
+        const faceDir = attackTarget ? new THREE.Vector3().subVectors(attackTarget.pos, unit.pos) : dir;
+        const desiredYaw = Math.atan2(faceDir.x, faceDir.z) + (unit.mesh.userData.facingOffset || 0);
         let deltaYaw = desiredYaw - unit.mesh.rotation.y;
         while (deltaYaw > Math.PI) deltaYaw -= Math.PI * 2;
         while (deltaYaw < -Math.PI) deltaYaw += Math.PI * 2;
         unit.mesh.rotation.y += deltaYaw * Math.min(1, dt * 12);
-        unit.stepPhase += dt * unit.speed * vis.bobSpeed;
-        moved = true;
       }
     }
 
@@ -424,7 +433,6 @@ export function updateUnits(sceneCtx, state, dt, notify) {
 }
 
 export function autoSpawnWorkers(sceneCtx, state, dt, notify) {
-  // Защита от всплесков времени, чтобы спавн не срабатывал 20 раз подряд при подвисании
   dt = Math.min(dt, 0.1); 
   
   state.workerSpawnTimer += dt;
