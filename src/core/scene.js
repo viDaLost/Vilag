@@ -129,5 +129,5 @@ export function createScene(canvas) {
     composer.setSize(innerWidth, innerHeight);
   }
 
-  return { renderer, scene, camera, controls, composer, hemi, sun, sky, stars, cloudLayer, world, worldBase, groups, resize };
+  return { renderer, scene, camera, controls, composer, hemi, sun, sky, stars, cloudLayer, world, worldBase, groups, effectBursts: [], resize };
 }
