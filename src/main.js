@@ -661,13 +661,12 @@ async function stepSimulation(dt) {
     updateTerritoryOverlay(sceneCtx, state);
     notify('Границы державы расширились');
   }
+  
   spawnConstructionDust(dt);
 
-  state.workerSpawnTimer -= dt;
-  if (state.workerSpawnTimer <= 0) {
-    state.workerSpawnTimer = GAME_CONFIG.workerSpawnEvery;
-    autoSpawnWorkers(sceneCtx, state, notify);
-  }
+  // Теперь units.js сам управляет своим временем!
+  autoSpawnWorkers(sceneCtx, state, dt, notify);
+  
   if (state.seasonTime >= GAME_CONFIG.seasonDuration) {
     state.seasonTime = 0;
     maybeChangeWeather(state);
