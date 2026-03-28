@@ -201,6 +201,9 @@ export function queueTraining(building, type) {
 }
 
 export function updateTraining(sceneCtx, state, dt, notify) {
+  // Защита от всплесков времени при загрузке 3D моделей
+  dt = Math.min(dt, 0.1); 
+
   for (const building of state.buildings) {
     if (!building.trainQueue.length) continue;
     const current = building.trainQueue[0];
@@ -295,6 +298,9 @@ function chooseNewBuildingTask(unit, state) {
 }
 
 export function updateUnits(sceneCtx, state, dt, notify) {
+  // Защита от всплесков времени
+  dt = Math.min(dt, 0.1);
+
   const capital = getCapital(state);
   const capitalTile = capital ? state.mapIndex.get(capital.tileId) : null;
   for (let i = state.units.length - 1; i >= 0; i--) {
@@ -418,16 +424,21 @@ export function updateUnits(sceneCtx, state, dt, notify) {
 }
 
 export function autoSpawnWorkers(sceneCtx, state, dt, notify) {
+  // Защита от всплесков времени, чтобы спавн не срабатывал 20 раз подряд при подвисании
+  dt = Math.min(dt, 0.1); 
+  
   state.workerSpawnTimer += dt;
   const cap = state.resources.populationCap || 18;
   const spawnDelay = state.workerSpawnDelay || GAME_CONFIG.workerSpawnEvery || 22;
   if (state.workerSpawnTimer < spawnDelay) return;
+  
   state.workerSpawnTimer = 0;
   if (state.resources.population >= cap) return;
   const capital = getCapital(state);
   if (!capital) return;
   const tile = state.mapIndex.get(capital.tileId);
   if (!tile) return;
+  
   state.resources.population += 1;
   state.resources.workers += 1;
   spawnUnit(sceneCtx, state, 'worker', new THREE.Vector3(tile.pos.x + Math.random(), tile.height, tile.pos.z + Math.random()), null);
