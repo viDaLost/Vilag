@@ -129,7 +129,7 @@ async function spawnCapital() {
   state.capitalId = capital.id;
   center.buildingId = capital.id;
   state.resources.population = 12;
-  state.resources.workers = 4;
+  state.resources.workers = 5;
   capital.level = 1;
 
   const neighbors = getNeighbors(state, center).filter((t) => t.type !== 'water');

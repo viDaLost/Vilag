@@ -26,7 +26,7 @@ export function createInitialState() {
       stone: 55,
       population: 14,
       populationCap: 18,
-      workers: 4,
+      workers: 5,
       army: 0,
       prestige: 12,
       stability: 76,

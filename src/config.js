@@ -1,5 +1,5 @@
 export const GAME_CONFIG = {
-  saveKey: 'empire-east-3d-rts-save-v16-terrainmesh',
+  saveKey: 'empire-east-3d-rts-save-v17-decor-glb',
   mapRadius: 13,
   hexSize: 1.72,
   axialScaleX: 0.985,
@@ -224,29 +224,14 @@ export const UNITS = {
 
 
 export const DECOR_MODELS = {
-  oak: { file: 'tree_oak.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  tree: { file: 'tree_default.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  pine: { file: 'tree_pineTallA_detailed.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  pineRound: { file: 'tree_pineRoundC.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  rockLarge: { file: 'rock_largeA.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  rockLargeB: { file: 'rock_largeC.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  rockSmall: { file: 'rock_smallA.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  rockFlat: { file: 'rock_smallFlatA.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  bush: { file: 'plant_bushDetailed.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  bushSmall: { file: 'plant_bushSmall.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  grass: { file: 'grass_large.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  flowerYellow: { file: 'flower_yellowA.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  flowerRed: { file: 'flower_redA.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  logLarge: { file: 'log_large.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  logStack: { file: 'log_stack.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  wheat: { file: 'crops_wheatStageB.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  corn: { file: 'crops_cornStageD.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  dirtRow: { file: 'crops_dirtRow.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  dirtSingle: { file: 'crops_dirtSingle.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  lily: { file: 'lily_small.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  fence: { file: 'fence_simple.fbx', scale: 0.018, y: 0.0, root: 'kenney' },
-  cleric: { file: 'cleric.gltf', targetHeight: 0.55, y: 0.0, root: 'units' },
-  wizard: { file: 'wizard.gltf', targetHeight: 0.55, y: 0.0, root: 'units' }
+  tree: { file: 'trees.glb', scale: 0.44, y: 0.0, root: 'decor' },
+  oak: { file: 'trees.glb', scale: 0.52, y: 0.0, root: 'decor' },
+  pine: { file: 'pine-trees.glb', scale: 0.54, y: 0.0, root: 'decor' },
+  pineRound: { file: 'pine-trees.glb', scale: 0.46, y: 0.0, root: 'decor' },
+  rocks: { file: 'rocks.glb', scale: 0.28, y: 0.0, root: 'decor' },
+  goldRock: { file: 'gold-rocks.glb', scale: 0.24, y: 0.0, root: 'decor' },
+  logs: { file: 'logs.glb', scale: 0.24, y: 0.0, root: 'decor' },
+  crops: { file: 'crops.glb', scale: 0.18, y: 0.0, root: 'decor' }
 };
 
 export const UNIT_MODEL_MAP = {
