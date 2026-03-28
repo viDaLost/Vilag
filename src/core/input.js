@@ -94,7 +94,7 @@ export function setupInput(sceneCtx, state, handlers) {
       if (tile) return dispatchTile(tile);
     }
 
-    const hits = raycaster.intersectObjects(groups.tiles.children, false);
+    const hits = raycaster.intersectObjects(groups.overlays.children, false);
     if (hits.length) {
       const tile = state.map.find((t) => t.mesh === hits[0].object);
       if (tile) return dispatchTile(tile);
