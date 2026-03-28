@@ -24,10 +24,10 @@ export function createScene(canvas) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = innerWidth < 760 ? 1.72 : 1.58;
+  renderer.toneMappingExposure = innerWidth < 760 ? 2.05 : 1.9;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x8a745f, 58, 210);
+  scene.fog = new THREE.Fog(0xb19375, 78, 230);
 
   const camera = new THREE.PerspectiveCamera(innerWidth < 760 ? 52 : 50, innerWidth / innerHeight, .1, 800);
   camera.position.set(innerWidth < 760 ? 18 : 22, innerWidth < 760 ? 21 : 26, innerWidth < 760 ? 18 : 21);
@@ -50,15 +50,15 @@ export function createScene(canvas) {
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), innerWidth < 800 ? .11 : .09, .35, .96));
 
-  const hemi = new THREE.HemisphereLight(0xfffbef, 0x8a6545, 2.15);
+  const hemi = new THREE.HemisphereLight(0xfffbef, 0x8a6545, 2.5);
   scene.add(hemi);
-  const ambient = new THREE.AmbientLight(0xfff4e5, .92);
+  const ambient = new THREE.AmbientLight(0xfff4e5, 1.15);
   scene.add(ambient);
-  const fill = new THREE.DirectionalLight(0xfff0da, .95);
+  const fill = new THREE.DirectionalLight(0xfff0da, 1.15);
   fill.position.set(-26, 28, 16);
   scene.add(fill);
 
-  const sun = new THREE.DirectionalLight(0xffedcf, 2.8);
+  const sun = new THREE.DirectionalLight(0xffedcf, 3.2);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -70;

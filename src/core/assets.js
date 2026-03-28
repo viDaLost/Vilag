@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
 import { getModelCandidates } from '../data/modelPaths.js';
 
 const loader = new GLTFLoader();
@@ -10,7 +11,7 @@ async function loadFirst(paths) {
   for (const path of paths) {
     try {
       const gltf = await loader.loadAsync(path);
-      return { scene: gltf.scene, path };
+      return { gltf, path };
     } catch (err) {
       lastError = err;
     }
@@ -26,38 +27,59 @@ function prepareScene(scene) {
       obj.frustumCulled = true;
       if (Array.isArray(obj.material)) {
         obj.material.forEach((m) => {
+          if (!m) return;
           m.depthWrite = true;
-          if ('envMapIntensity' in m) m.envMapIntensity = 0.65;
+          if ('envMapIntensity' in m) m.envMapIntensity = 0.78;
         });
       } else if (obj.material) {
         obj.material.depthWrite = true;
-        if ('envMapIntensity' in obj.material) obj.material.envMapIntensity = 0.65;
+        if ('envMapIntensity' in obj.material) obj.material.envMapIntensity = 0.78;
       }
     }
   });
   return scene;
 }
 
-async function loadModel(filename, root = 'buildings') {
+function cloneUnitAsset(entry) {
+  const scene = SkeletonUtils.clone(entry.scene);
+  const animations = entry.animations.map((clip) => clip.clone());
+  prepareScene(scene);
+  return { scene, animations };
+}
+
+function cloneStaticScene(scene) {
+  const cloned = scene.clone(true);
+  prepareScene(cloned);
+  return cloned;
+}
+
+async function loadModelEntry(filename, root = 'buildings') {
   if (!filename) return null;
   const key = `${root}:${filename}`;
-  if (cache.has(key)) return cache.get(key).clone(true);
-  const { scene } = await loadFirst(getModelCandidates(filename, root));
-  prepareScene(scene);
-  cache.set(key, scene);
-  return scene.clone(true);
+  if (cache.has(key)) return cache.get(key);
+  const { gltf } = await loadFirst(getModelCandidates(filename, root));
+  prepareScene(gltf.scene);
+  const entry = {
+    scene: gltf.scene,
+    animations: gltf.animations || []
+  };
+  cache.set(key, entry);
+  return entry;
 }
 
-export function loadBuildingModel(filename) {
-  return loadModel(filename, 'buildings');
+export async function loadBuildingModel(filename) {
+  const entry = await loadModelEntry(filename, 'buildings');
+  return cloneStaticScene(entry.scene);
 }
 
-export function loadDecorModel(filename) {
-  return loadModel(filename, 'decor');
+export async function loadDecorModel(filename) {
+  const entry = await loadModelEntry(filename, 'decor');
+  return cloneStaticScene(entry.scene);
 }
 
-export function loadUnitModel(filename) {
-  return loadModel(filename, 'units');
+export async function loadUnitModel(filename) {
+  const entry = await loadModelEntry(filename, 'units');
+  return cloneUnitAsset(entry);
 }
 
 export function makeFallbackMesh(color = 0xb4873e) {
