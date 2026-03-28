@@ -1,15 +1,20 @@
 import * as THREE from 'three';
+import { MOUSE } from 'three';
 import { GAME_CONFIG } from '../config.js';
 import { closeDrawer } from '../ui/drawer.js';
 import { closeModal } from '../ui/modal.js';
 
 export function setupInput(sceneCtx, state, handlers) {
-  const { camera, renderer, groups } = sceneCtx;
+  const { camera, renderer, groups, controls } = sceneCtx;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
   let down = { x: 0, y: 0, t: 0 };
+
+  controls.mouseButtons.LEFT = MOUSE.ROTATE;
+  controls.mouseButtons.MIDDLE = MOUSE.PAN;
+  controls.mouseButtons.RIGHT = MOUSE.ROTATE;
 
   const closeTransientUi = (target) => {
     if (target.closest('#context-drawer, #bottom-dock, #top-bar, #hud-strip, #side-panels, #modal-window')) return;
@@ -56,6 +61,14 @@ export function setupInput(sceneCtx, state, handlers) {
 
   renderer.domElement.addEventListener('pointermove', (e) => {
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12) state.dragging = true;
+  }, { passive: true });
+
+  renderer.domElement.addEventListener('wheel', (e) => {
+    if ('ontouchstart' in window) return;
+    updatePointer(e);
+    if (!raycaster.ray.intersectPlane(groundPlane, hitPoint)) return;
+    const target = new THREE.Vector3(hitPoint.x, Math.max(0, hitPoint.y), hitPoint.z);
+    controls.target.lerp(target, .22);
   }, { passive: true });
 
   renderer.domElement.addEventListener('pointerup', (e) => {

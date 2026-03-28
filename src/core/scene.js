@@ -24,39 +24,41 @@ export function createScene(canvas) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = innerWidth < 760 ? 1.5 : 1.35;
+  renderer.toneMappingExposure = innerWidth < 760 ? 1.72 : 1.58;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x6e5d4f, 42, 168);
+  scene.fog = new THREE.Fog(0x8a745f, 58, 210);
 
   const camera = new THREE.PerspectiveCamera(innerWidth < 760 ? 52 : 50, innerWidth / innerHeight, .1, 800);
-  camera.position.set(innerWidth < 760 ? 18 : 20, innerWidth < 760 ? 21 : 24, innerWidth < 760 ? 18 : 19);
+  camera.position.set(innerWidth < 760 ? 18 : 22, innerWidth < 760 ? 21 : 26, innerWidth < 760 ? 18 : 21);
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = .065;
-  controls.maxDistance = innerWidth < 760 ? 56 : 96;
-  controls.minDistance = innerWidth < 760 ? 11 : 7;
-  controls.maxPolarAngle = Math.PI / 2.12;
-  controls.minPolarAngle = Math.PI / 4.8;
-  controls.enablePan = false;
-  controls.zoomSpeed = 1.15;
+  controls.maxDistance = innerWidth < 760 ? 56 : 108;
+  controls.minDistance = innerWidth < 760 ? 11 : 5;
+  controls.maxPolarAngle = Math.PI / 2.08;
+  controls.minPolarAngle = Math.PI / 4.9;
+  controls.enablePan = !('ontouchstart' in window);
+  controls.screenSpacePanning = false;
+  controls.panSpeed = .9;
+  controls.zoomSpeed = 1.18;
   if ('zoomToCursor' in controls) controls.zoomToCursor = true;
   controls.target.set(0, 1.4, 0);
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), innerWidth < 800 ? .1 : .08, .35, .96));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), innerWidth < 800 ? .11 : .09, .35, .96));
 
-  const hemi = new THREE.HemisphereLight(0xfff4df, 0x7b5131, 1.75);
+  const hemi = new THREE.HemisphereLight(0xfffbef, 0x8a6545, 2.15);
   scene.add(hemi);
-  const ambient = new THREE.AmbientLight(0xfff0dd, .56);
+  const ambient = new THREE.AmbientLight(0xfff4e5, .92);
   scene.add(ambient);
-  const fill = new THREE.DirectionalLight(0xffeed1, .6);
+  const fill = new THREE.DirectionalLight(0xfff0da, .95);
   fill.position.set(-26, 28, 16);
   scene.add(fill);
 
-  const sun = new THREE.DirectionalLight(0xffe9c8, 2.25);
+  const sun = new THREE.DirectionalLight(0xffedcf, 2.8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -70;
@@ -71,8 +73,8 @@ export function createScene(canvas) {
     new THREE.ShaderMaterial({
       side: THREE.BackSide,
       uniforms: {
-        topColor: { value: new THREE.Color(0x9ad9ff) },
-        bottomColor: { value: new THREE.Color(0xffd9aa) },
+        topColor: { value: new THREE.Color(0xa8e2ff) },
+        bottomColor: { value: new THREE.Color(0xffddb0) },
         offset: { value: 20 },
         exponent: { value: .7 }
       },
@@ -111,7 +113,7 @@ export function createScene(canvas) {
 
   const worldBase = new THREE.Mesh(
     new THREE.CylinderGeometry(54, 64, 8, 48),
-    new THREE.MeshStandardMaterial({ color: 0x4d3823, roughness: 1 })
+    new THREE.MeshStandardMaterial({ color: 0x5a4129, roughness: 1 })
   );
   worldBase.position.y = -5.6;
   worldBase.receiveShadow = true;
