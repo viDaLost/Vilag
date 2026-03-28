@@ -13,9 +13,9 @@ export function getModelCandidates(filename, root = 'buildings') {
     .replace(/\w/g, (c) => c.toUpperCase());
   const legacy = `${dir}${named}`;
   return [
-    `${base}?v=8`,
+    `${base}?v=9`,
     base,
-    `${legacy}?v=8`,
+    `${legacy}?v=9`,
     legacy,
   ];
 }
