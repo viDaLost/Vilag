@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { AnimationMixer, LoopOnce } from 'three';
-import { UNITS, UNIT_MODEL_MAP, UNIT_VISUALS } from '../config.js';
+import { GAME_CONFIG, UNITS, UNIT_MODEL_MAP, UNIT_VISUALS } from '../config.js';
 import { getCapital, buildingCenter } from './buildings.js';
 import { dist2 } from '../utils/helpers.js';
 import { spawnCollapse } from './combat.js';
@@ -375,7 +375,11 @@ export function updateUnits(sceneCtx, state, dt, notify) {
       if (len > .18) {
         dir.normalize();
         unit.pos.addScaledVector(dir, unit.speed * dt);
-        unit.mesh.rotation.y = Math.atan2(dir.x, dir.z) + (unit.mesh.userData.facingOffset || Math.PI);
+        const desiredYaw = Math.atan2(dir.x, dir.z) + (unit.mesh.userData.facingOffset || 0);
+        let deltaYaw = desiredYaw - unit.mesh.rotation.y;
+        while (deltaYaw > Math.PI) deltaYaw -= Math.PI * 2;
+        while (deltaYaw < -Math.PI) deltaYaw += Math.PI * 2;
+        unit.mesh.rotation.y += deltaYaw * Math.min(1, dt * 12);
         unit.stepPhase += dt * unit.speed * vis.bobSpeed;
         moved = true;
       }
@@ -416,7 +420,8 @@ export function updateUnits(sceneCtx, state, dt, notify) {
 export function autoSpawnWorkers(sceneCtx, state, dt, notify) {
   state.workerSpawnTimer += dt;
   const cap = state.resources.populationCap || 18;
-  if (state.workerSpawnTimer < state.workerSpawnDelay) return;
+  const spawnDelay = state.workerSpawnDelay || GAME_CONFIG.workerSpawnEvery || 22;
+  if (state.workerSpawnTimer < spawnDelay) return;
   state.workerSpawnTimer = 0;
   if (state.resources.population >= cap) return;
   const capital = getCapital(state);
