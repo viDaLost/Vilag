@@ -242,6 +242,7 @@ body { touch-action: manipulation; }
 }
 .card-btn small { color: var(--muted); line-height: 1.35; }
 .card-btn:disabled { opacity: .42; filter: grayscale(1); }
+.danger-card { border-color: rgba(255,120,120,.35); background: linear-gradient(145deg, rgba(121,38,28,.9), rgba(70,18,14,.96)); }
 #notifications {
   position: absolute;
   top: calc(186px + var(--safe-top));
