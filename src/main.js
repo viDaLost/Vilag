@@ -433,13 +433,13 @@ function updateDayNightVisual(dt) {
   const ang = t * Math.PI * 2;
   sceneCtx.sun.position.set(Math.cos(ang) * 40, Math.max(8, Math.sin(ang) * 34), Math.sin(ang) * 20 - 8);
   const lightMul = { clear: 1, rain: .92, mist: .8, dust: .84 }[state.weather];
-  sceneCtx.sun.intensity = clamp(Math.sin(ang) * 1.05 + .78, .24, 1.42) * lightMul;
-  sceneCtx.hemi.intensity = .36 + sceneCtx.sun.intensity * .46;
-  sceneCtx.ambient.intensity = .18 + sceneCtx.sun.intensity * .06;
+  sceneCtx.sun.intensity = clamp(Math.sin(ang) * 1.08 + .88, .42, 1.66) * lightMul;
+  sceneCtx.hemi.intensity = .52 + sceneCtx.sun.intensity * .40;
+  sceneCtx.ambient.intensity = .28 + sceneCtx.sun.intensity * .08;
   sceneCtx.stars.visible = sceneCtx.sun.position.y < 12;
-  sceneCtx.sky.material.uniforms.topColor.value.setHex(sceneCtx.sun.position.y > 14 ? 0x8ed0ff : 0x182a56);
-  sceneCtx.sky.material.uniforms.bottomColor.value.setHex(sceneCtx.sun.position.y > 14 ? 0xf6c684 : 0x522d16);
-  sceneCtx.scene.fog.color.setHex(sceneCtx.sun.position.y > 14 ? 0x6d5537 : 0x101018);
+  sceneCtx.sky.material.uniforms.topColor.value.setHex(sceneCtx.sun.position.y > 14 ? 0x9ad5ff : 0x243260);
+  sceneCtx.sky.material.uniforms.bottomColor.value.setHex(sceneCtx.sun.position.y > 14 ? 0xffd29a : 0x6a3d1f);
+  sceneCtx.scene.fog.color.setHex(sceneCtx.sun.position.y > 14 ? 0x7a5a3d : 0x171425);
   sceneCtx.cloudLayer.children.forEach((cloud, i) => {
     cloud.rotation.y += dt * cloud.userData.drift * .1;
     cloud.position.x += Math.sin((state.worldTime * .03) + i) * dt * .1;
@@ -505,7 +505,7 @@ function updateConstructionOverlays() {
     const el = wrap.querySelector(`[data-job-id="${job.id}"]`);
     if (!tile || !el) return;
     const world = tile.pos.clone();
-    world.y = tile.height + 2.1;
+    world.y = tile.height + 2.7;
     world.project(sceneCtx.camera);
     const x = (world.x * .5 + .5) * innerWidth;
     const y = (world.y * -.5 + .5) * innerHeight;
