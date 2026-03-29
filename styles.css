@@ -2,8 +2,8 @@
   --app-height: 100dvh;
   --gold: #ffd66b;
   --gold-2: #d69824;
-  --bg-1: rgba(24, 10, 4, .74);
-  --bg-2: rgba(52, 25, 8, .84);
+  --bg-1: rgba(24, 10, 4, .46);
+  --bg-2: rgba(52, 25, 8, .58);
   --stroke: rgba(255, 214, 107, .24);
   --text: #f6e4ba;
   --muted: #d2bf91;
@@ -56,7 +56,7 @@ body { touch-action: manipulation; }
   border: 1px solid var(--stroke);
   box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.03);
   border-radius: 22px;
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(8px);
 }
 #top-bar {
   position: absolute;
@@ -184,7 +184,7 @@ body { touch-action: manipulation; }
 #bottom-actions {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 .action-btn, .speed-btn, .primary-btn, .secondary-btn, .card-btn {
@@ -199,7 +199,7 @@ body { touch-action: manipulation; }
   box-shadow: 0 10px 24px rgba(0,0,0,.28);
 }
 .action-btn { min-height: 58px; }
-.action-btn.wide { grid-column: span 2; }
+.action-btn.wide { grid-column: span 4; }
 .action-btn.accent, .speed-btn.active, .primary-btn {
   outline: 2px solid rgba(255,214,107,.4);
   background: linear-gradient(145deg, rgba(165,98,19,.96), rgba(88,48,10,.98));
@@ -382,7 +382,7 @@ body { touch-action: manipulation; }
     width: calc(100vw - 14px);
     left: 7px;
     transform: none;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     padding: 7px;
     gap: 6px;
     top: calc(6px + var(--safe-top));
@@ -403,7 +403,7 @@ body { touch-action: manipulation; }
   .info-card { padding: 11px 12px; }
   .panel-title { font-size: 14px; margin-bottom: 5px; }
   .badge { padding: 5px 9px; font-size: 11px; }
-  .status-cluster { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 7px; }
+  .status-cluster { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 7px; }
   .mini-panel { min-height: 42px; font-size: 11px; border-radius: 14px; }
   #side-panels { display: none; }
   #bottom-dock {
@@ -439,7 +439,7 @@ body { touch-action: manipulation; }
 
 @media (max-width: 560px) {
   #top-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 5px;
     padding: 6px;
   }
@@ -455,7 +455,7 @@ body { touch-action: manipulation; }
   .info-card { padding: 10px 11px; }
   #kingdom-text, #selection-content, #objectives-list { font-size: 12px; line-height: 1.35; }
   .panel-title { font-size: 13px; }
-  .status-cluster { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 6px; }
+  .status-cluster { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px; }
   .mini-panel { min-height: 38px; font-size: 10px; padding: 0 4px; }
   #bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .action-btn {
@@ -511,4 +511,19 @@ body { touch-action: manipulation; }
   #bottom-dock { width: calc(100vw - 12px); left: 6px; transform: none; bottom: calc(6px + var(--safe-bottom)); padding: 7px; gap: 7px; }
   .action-btn, .speed-btn { min-height: 44px; padding: 9px 8px; font-size: 13px; }
   #notifications { top: calc(208px + var(--safe-top)); }
+}
+
+@media (max-width: 899px) {
+  #side-panels { display:none; }
+  #top-bar { width: min(96vw, 96vw); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; }
+  .res-card:nth-child(n+5) { display:none; }
+  .res-card { min-height: 56px; }
+  #hud-strip { top: calc(132px + var(--safe-top)); width: min(96vw, 96vw); gap: 8px; }
+  .info-card { padding: 12px 14px; }
+  #bottom-dock { width: min(96vw, 96vw); padding: 8px; }
+  #bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .action-btn.wide { grid-column: span 2; }
+  #notifications { top: calc(246px + var(--safe-top)); max-width: 92vw; }
+  .notice { font-size: 13px; padding: 8px 12px; max-width: 92vw; }
+  #context-drawer { width: min(94vw, 94vw); right: 3vw; top: auto; bottom: calc(120px + var(--safe-bottom)); max-height: 48vh; }
 }
