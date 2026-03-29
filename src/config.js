@@ -8,10 +8,10 @@ export const GAME_CONFIG = {
   dayDuration: 320,
   seasonDuration: 960,
   autosaveEvery: 12,
-  workerSpawnEvery: 30,
-  enemyWaveEvery: 110,
+  workerSpawnEvery: 34,
+  enemyWaveEvery: 120,
   enemyCampCount: 5,
-  decorModelDensity: 0.72,
+  decorModelDensity: 0.44,
   maxPopulationSoft: 60,
   doubleTapMs: 340,
   decorPerTileSoftCap: 5,
@@ -36,7 +36,8 @@ export const RESOURCE_META = [
   ['prestige', '👑', 'Престиж'],
   ['stability', '🕊️', 'Порядок'],
   ['knowledge', '🔬', 'Знание'],
-  ['threat', '🏹', 'Угроза']
+  ['threat', '🏹', 'Угроза'],
+  ['roads', '🛣️', 'Дороги']
 ];
 
 export const ERA_DATA = [
@@ -236,33 +237,32 @@ export const UNITS = {
 };
 
 export const DECOR_MODELS = {
-  tree: { file: 'trees.glb', scale: 0.95, y: 0.0, root: 'decor' },
-  oak: { file: 'trees.glb', scale: 1.08, y: 0.0, root: 'decor' },
-  pine: { file: 'pine-trees.glb', scale: 1.05, y: 0.0, root: 'decor' },
-  pineAlt: { file: 'pine-trees-alt.glb', scale: 1.08, y: 0.0, root: 'decor' },
-  pineRound: { file: 'pine-trees.glb', scale: 0.9, y: 0.0, root: 'decor' },
-  rocks: { file: 'rocks.glb', scale: 0.64, y: 0.0, root: 'decor' },
-  goldRock: { file: 'gold-rocks.glb', scale: 0.56, y: 0.0, root: 'decor' },
-  logs: { file: 'logs.glb', scale: 0.55, y: 0.0, root: 'decor' },
-  crops: { file: 'crops.glb', scale: 0.5, y: 0.0, root: 'decor' },
-  hut: { file: 'hut.glb', scale: 1.0, y: 0.0, root: 'decor' },
-  shack: { file: 'shack.glb', scale: 0.98, y: 0.0, root: 'decor' },
-  house: { file: 'house.glb', scale: 0.94, y: 0.0, root: 'decor' },
-  mountain: { file: 'mountain.glb', scale: 2.2, y: 0.0, root: 'decor' },
-  mountainGroup: { file: 'mountain-group.glb', scale: 2.8, y: 0.0, root: 'decor' },
-  watchTower: { file: 'small-watch-tower.glb', scale: 1.0, y: 0.0, root: 'decor' },
-  encampment: { file: 'wooden-encampment.glb', scale: 1.12, y: 0.0, root: 'decor' }
+  tree: { file: 'trees.glb', scale: 0.72, y: 0.0, root: 'decor' },
+  oak: { file: 'trees.glb', scale: 0.84, y: 0.0, root: 'decor' },
+  pine: { file: 'pine-trees.glb', scale: 0.8, y: 0.0, root: 'decor' },
+  pineAlt: { file: 'pine-trees-alt.glb', scale: 0.82, y: 0.0, root: 'decor' },
+  pineRound: { file: 'pine-trees.glb', scale: 0.66, y: 0.0, root: 'decor' },
+  rocks: { file: 'rocks.glb', scale: 0.46, y: 0.0, root: 'decor' },
+  goldRock: { file: 'gold-rocks.glb', scale: 0.38, y: 0.0, root: 'decor' },
+  logs: { file: 'logs.glb', scale: 0.38, y: 0.0, root: 'decor' },
+  hut: { file: 'hut.glb', scale: 0.72, y: 0.0, root: 'decor' },
+  shack: { file: 'shack.glb', scale: 0.7, y: 0.0, root: 'decor' },
+  house: { file: 'house.glb', scale: 0.68, y: 0.0, root: 'decor' },
+  mountain: { file: 'mountain.glb', scale: 1.45, y: 0.0, root: 'decor' },
+  mountainGroup: { file: 'mountain-group.glb', scale: 1.8, y: 0.0, root: 'decor' },
+  watchTower: { file: 'small-watch-tower.glb', scale: 0.74, y: 0.0, root: 'decor' },
+  encampment: { file: 'wooden-encampment.glb', scale: 0.86, y: 0.0, root: 'decor' }
 };
 
 export const UNIT_MODEL_MAP = {
-  worker: { file: 'monk.gltf', targetHeight: 0.3, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
-  militia: { file: 'warrior.gltf', targetHeight: 0.34, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
-  archer: { file: 'ranger.gltf', targetHeight: 0.336, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
-  swordsman: { file: 'rogue.gltf', targetHeight: 0.34, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
-  raider: { file: 'rogue.gltf', targetHeight: 0.36, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
-  raiderArcher: { file: 'ranger.gltf', targetHeight: 0.36, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
-  brute: { file: 'warrior.gltf', targetHeight: 0.44, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
-  wolfRider: { file: 'wizard.gltf', targetHeight: 0.4, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  worker: { file: 'monk.gltf', targetHeight: 0.600, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  militia: { file: 'warrior.gltf', targetHeight: 0.17, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  archer: { file: 'ranger.gltf', targetHeight: 0.168, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  swordsman: { file: 'rogue.gltf', targetHeight: 0.17, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  raider: { file: 'rogue.gltf', targetHeight: 0.606, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  raiderArcher: { file: 'ranger.gltf', targetHeight: 0.606, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  brute: { file: 'warrior.gltf', targetHeight: 0.402, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
+  wolfRider: { file: 'wizard.gltf', targetHeight: 0.40, y: 0.0, rotY: 3.141592653589793, faceOffset: Math.PI },
 };
 
 export const UNIT_VISUALS = {
@@ -287,7 +287,7 @@ export const TECHS = [
 
 export const OBJECTIVES = [
   { id: 'food', title: 'Сильные амбары', target: 220, metric: 'food', reward: { population: 2, stability: 8 } },
-  { id: 'defense', title: 'Укрепить рубежи', target: 3, metric: 'defenseBuildings', reward: { gold: 40, prestige: 5 } },
+  { id: 'economy', title: 'Запустить хозяйство', target: 2, metric: 'economyReady', reward: { gold: 20, prestige: 3 } },
   { id: 'army', title: 'Собрать войско', target: 10, metric: 'armyUnits', reward: { prestige: 6, stability: 4 } },
   { id: 'wonder', title: 'Создать чудо', target: 1, metric: 'wonderBuilt', reward: { prestige: 18, stability: 14 } }
 ];

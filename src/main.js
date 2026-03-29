@@ -14,7 +14,7 @@ import { createInitialState } from './state.js';
 import { createScene } from './core/scene.js';
 import { generateWorld, getNeighbors, isTileInsideTerritory } from './systems/world.js';
 import { getTerrainY } from './systems/terrain.js';
-import { renderTiles, renderRoads, clearDecorOnTile, populateDecorModels, updateTerritoryOverlay, clearBuildHints, showBuildHints } from './systems/renderWorld.js';
+import { renderTiles, renderRoads, clearDecorOnTile, populateDecorModels, updateTerritoryOverlay } from './systems/renderWorld.js';
 import { setupHud, updateHud } from './ui/hud.js';
 import { drawMinimap } from './ui/minimap.js';
 import { notify } from './ui/notifications.js';
@@ -22,7 +22,7 @@ import { openBuildMenu, openQuickBuildMenu, openResearchMenu, openTrainMenu, bin
 import { setupModal, openModal, closeModal } from './ui/modal.js';
 import { updateSelection } from './ui/selection.js';
 import { setupInput } from './core/input.js';
-import { canPlaceBuilding, hasCost, payCost, placeConstruction, finishConstruction, getBuildingById, getBuildingOnTile, getCapital, startUpgrade, repairBuilding, destroyBuilding, createGhostBuildingMesh, getBuildingWorkerDemand } from './systems/buildings.js';
+import { canPlaceBuilding, hasCost, payCost, placeConstruction, finishConstruction, getBuildingById, getBuildingOnTile, getCapital, startUpgrade, repairBuilding, destroyBuilding, createGhostBuildingMesh } from './systems/buildings.js';
 import { applyRealTimeEconomy, updateConstruction, collectFinishedConstruction, updateEra, updateObjectives, updateResearch } from './systems/economy.js';
 import { autoSpawnWorkers, queueTraining, updateTraining, updateUnits, spawnUnit } from './systems/units.js';
 import { updateDefense, updateProjectiles, spawnCollapse } from './systems/combat.js';
@@ -80,9 +80,7 @@ async function bootstrap() {
 
   setLoading(48, 'Размещение столицы…');
   await spawnCapital();
-  createRoadNetworkFromCapital();
   await spawnEnemyCamps();
-  renderRoads(sceneCtx, state);
 
   setLoading(58, 'Подготовка интерфейса…');
   updateHud(state);
@@ -94,7 +92,7 @@ async function bootstrap() {
     onTile: onTileSelected,
     onTileDouble: onTileDoubleSelected,
     onUnit: onUnitSelected,
-    onEmpty: () => { state.selected = null; state.selectedUnits = []; clearBuildHints(sceneCtx, state); updateSelection(state); }
+    onEmpty: () => { state.selected = null; updateSelection(state); }
   });
 
   setLoading(100, 'Готово');
@@ -129,11 +127,11 @@ async function spawnCapital() {
   const capital = await finishConstruction(sceneCtx, state, job);
   state.capitalId = capital.id;
   center.buildingId = capital.id;
-  state.resources.population = 12;
-  state.resources.workers = 5;
+  state.resources.population = 6;
+  state.resources.workers = 3;
   capital.level = 1;
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 3; i++) {
     const randomPos = new THREE.Vector3(center.pos.x + (Math.random() - 0.5) * 1.5, center.height, center.pos.z + (Math.random() - 0.5) * 1.5);
     spawnUnit(sceneCtx, state, 'worker', randomPos, null);
   }
@@ -165,17 +163,13 @@ async function spawnCapital() {
   }
   const completed = collectFinishedConstruction(state);
   for (const done of completed) await finishConstruction(sceneCtx, state, done);
+  state.resources.gold = 0;
+  state.resources.food = 0;
+  state.resources.wood = 0;
+  state.resources.stone = 0;
 }
 
-function createRoadNetworkFromCapital() {
-  const capital = getBuildingById(state, state.capitalId);
-  if (!capital) return;
-  const tile = state.mapIndex.get(capital.tileId);
-  for (const neighbor of getNeighbors(state, tile)) {
-    if (!neighbor || neighbor.type === 'water') continue;
-    addRoad(tile.id, neighbor.id);
-  }
-}
+function createRoadNetworkFromCapital() {}
 
 async function makeCampMesh(tile, faction) {
   const mesh = new THREE.Group();
@@ -204,18 +198,13 @@ async function spawnEnemyCamps() {
     const faction = factions[i % factions.length];
     return makeCampMesh(tile, faction).then((mesh) => {
       sceneCtx.groups.enemyCamps.add(mesh);
-      return { id: `camp-${i}`, tileId: tile.id, hp: 120 + (faction === 'iron' ? 30 : 0), pos: tile.pos.clone(), mesh, faction };
+      const hp = 120 + (faction === 'iron' ? 30 : 0);
+      return { id: `camp-${i}`, tileId: tile.id, hp, maxHp: hp, pos: tile.pos.clone(), mesh, faction, spawnCooldown: 5, hitFlash: 0 };
     });
   }));
 }
 
-function addRoad(aId, bId) {
-  const key = [aId, bId].sort().join('|');
-  if (state.roads.some((r) => r.key === key)) return false;
-  state.roads.push({ key, a: aId, b: bId });
-  state.resources.roads = 0;
-  return true;
-}
+function addRoad(aId, bId) { return false; }
 
 async function tryPlaceBuilding(tile, forcedType = null) {
   const type = forcedType || state.selectedBuildType;
@@ -286,42 +275,19 @@ function onTileSelected(tile) {
   const building = getBuildingOnTile(state, tile);
   if (state.placementMode?.type === 'rally') {
     const source = getBuildingById(state, state.placementMode.buildingId);
-    if (source) {
-      source.rallyTileId = tile.id;
-      source.rallyPoint = tile.pos.clone();
-      notify(`Точка сбора назначена для ${BUILDINGS[source.type].name}`);
-    }
+    if (source) { source.rallyTileId = tile.id; notify(`Точка сбора назначена для ${BUILDINGS[source.type].name}`); }
     state.placementMode = null;
     return;
   }
-  if (state.selectedUnits?.length) {
-    state.selectedUnits.forEach((u) => {
-      if (u.hostile) return;
-      u.commandTarget = tile.pos.clone();
-      u.patrolCenter = tile.pos.clone();
+  if (state.placementMode?.type === 'unit-command') {
+    state.selectedUnits.forEach((unit) => {
+      unit.commandTarget = tile.pos.clone();
+      unit.patrolCenter = tile.pos.clone();
+      unit.mode = 'move';
     });
-    notify(state.selectedUnits.length > 1 ? 'Отряд получил приказ и будет держать эту точку' : 'Юнит отправлен в указанную точку');
-    updateSelection(state);
-    return;
-  }
-  if (state.selected?.kind === 'unit' && !state.selected.ref.hostile) {
-    const unit = state.selected.ref;
-    const buildingHere = getBuildingOnTile(state, tile);
-    if (unit.type === 'worker' && buildingHere && getBuildingWorkerDemand(buildingHere) > 0) {
-      const demand = getBuildingWorkerDemand(buildingHere);
-      const assigned = state.units.filter((u) => u.type === 'worker' && u.assignedBuildingId === buildingHere.id).length;
-      if (assigned >= demand) { notify('В этом здании уже заполнен лимит рабочих'); return; }
-      unit.assignedBuildingId = buildingHere.id;
-      unit.manualAssignment = true;
-      unit.commandTarget = null;
-      unit.workerPhase = 'toWork';
-      notify(`Рабочий назначен: ${BUILDINGS[buildingHere.type].name}`);
-      updateSelection(state);
-      return;
-    }
-    unit.commandTarget = tile.pos.clone();
-    unit.patrolCenter = tile.pos.clone();
-    notify(unit.type === 'worker' ? 'Рабочий получил приказ двигаться' : 'Юнит получил приказ и будет патрулировать здесь');
+    if (state.selectedUnits.length) notify('Отряд направлен в точку');
+    state.placementMode = null;
+    state.selectedUnits = [];
     updateSelection(state);
     return;
   }
@@ -358,31 +324,25 @@ function onTileDoubleSelected(tile) {
 
 function onUnitSelected(unit) {
   state.selected = { kind: 'unit', ref: unit };
-  state.selectedUnits = unit.hostile ? [] : [unit];
+  if (!unit.hostile) {
+    state.selectedUnits = [unit];
+    state.placementMode = { type: 'unit-command' };
+  } else {
+    state.selectedUnits = [];
+    state.placementMode = null;
+  }
   highlightSelection();
   updateSelection(state);
 }
 
-function selectAllWarriors() {
-  state.selectedUnits = state.units.filter((u) => !u.hostile && u.type !== 'worker');
-  if (!state.selectedUnits.length) return notify('У тебя пока нет боевых юнитов');
-  state.selected = { kind: 'unit', ref: state.selectedUnits[0] };
-  updateSelection(state);
-  notify(`Выбрано воинов: ${state.selectedUnits.length}. Коснись точки на карте для приказа.`);
-}
-
-
 function highlightSelection() {
   state.buildings.forEach((b) => { if (b.selection) b.selection.material.opacity = 0; });
-  state.units.forEach((u) => { if (u.mesh?.userData?.ring) u.mesh.userData.ring.material.opacity = u.hostile ? .38 : .28; });
   const sel = state.selected;
   if (sel?.kind === 'tile') {
     const building = getBuildingOnTile(state, sel.ref);
     if (building?.selection) building.selection.material.opacity = .65;
   }
-  (state.selectedUnits || []).forEach((u) => { if (u.mesh?.userData?.ring) u.mesh.userData.ring.material.opacity = .6; });
 }
-
 
 function hookButtons() {
   $$('.speed-btn').forEach((btn) => {
@@ -422,7 +382,6 @@ function handleAction(action) {
       state.selectedBuildType = type;
       closeDrawer();
       showGhost(type);
-      showBuildHints(sceneCtx, state, type, canPlaceBuilding);
       notify(`Выбери место для: ${BUILDINGS[type].name}`);
     });
   }
@@ -433,11 +392,13 @@ function handleAction(action) {
   if (action === 'research-menu') {
     openResearchMenu(state, notify);
   }
+  if (action === 'select-all-army') {
+    state.selectedUnits = state.units.filter((u) => !u.hostile && u.type !== 'worker');
+    state.placementMode = state.selectedUnits.length ? { type: 'unit-command' } : null;
+    if (state.selectedUnits.length) notify('Все войска выбраны. Укажи точку на карте.');
+  }
   if (action === 'rules') {
     showRules();
-  }
-  if (action === 'select-warriors') {
-    selectAllWarriors();
   }
 }
 
@@ -468,7 +429,7 @@ function showRules() {
       <p><strong>Главная идея:</strong> ресурсы, строительство, обучение войск, враги, день и погода обновляются непрерывно. Кнопка хода заменена скоростью симуляции.</p>
       <p><strong>Управление на телефоне:</strong> один тап выбирает соту, юнита или здание. <strong>Двойной тап по пустой соте</strong> ставит последнюю постройку либо открывает нижнюю панель быстрой стройки. Тап вне окна теперь закрывает окна.</p>
       <p><strong>Подсказки стройки:</strong> над строящейся сотой появляется обратный отсчёт и пыль работ. Когда здание строится, декорации на этой соте убираются.</p>
-      <p><strong>Смысл партии:</strong> расширяй границы, удерживай еду и порядок, развивай логистику дорог, обучай войска и переживай всё более сложные набеги разных фракций. Цель — провести державу от основания к золотому веку.</p>
+      <p><strong>Смысл партии:</strong> расширяй границы, удерживай еду и порядок, обучай войска и переживай всё более сложные набеги разных фракций. Цель — провести державу от основания к золотому веку.</p>
     `,
     [
       { label: 'Начать', primary: true, onClick: closeModal },
@@ -493,6 +454,22 @@ async function showGhost(type) {
   ghostMesh = ghostGroup;
   sceneCtx.groups.ghosts.add(ghostMesh);
   sceneCtx.renderer.domElement.addEventListener('pointermove', pointerGhostMove);
+  refreshBuildPreview(type);
+}
+
+function clearBuildPreview() {
+  sceneCtx.groups.ghosts.children.filter((c) => c.userData?.preview).forEach((c) => sceneCtx.groups.ghosts.remove(c));
+}
+
+function refreshBuildPreview(type) {
+  clearBuildPreview();
+  state.map.filter((tile) => canPlaceBuilding(state, type, tile)).slice(0, 220).forEach((tile) => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.52, 16), new THREE.MeshBasicMaterial({ color: 0xb7ff8a, transparent: true, opacity: 0.2, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(tile.pos.x, tile.height + 0.05, tile.pos.z);
+    ring.userData.preview = true;
+    sceneCtx.groups.ghosts.add(ring);
+  });
 }
 
 function pointerGhostMove(e) {
@@ -516,13 +493,13 @@ function pointerGhostMove(e) {
 }
 
 function removeGhost() {
-  clearBuildHints(sceneCtx, state);
   if (!ghostMesh) return;
   sceneCtx.groups.ghosts.remove(ghostMesh);
   ghostMesh.geometry.dispose?.();
   ghostMesh.material.dispose?.();
   ghostMesh = null;
   sceneCtx.renderer.domElement.removeEventListener('pointermove', pointerGhostMove);
+  clearBuildPreview();
 }
 
 async function processFinishedConstruction() {
@@ -531,46 +508,15 @@ async function processFinishedConstruction() {
     const entity = await finishConstruction(sceneCtx, state, job);
     if (entity) {
       notify(job.mode === 'upgrade' ? `Улучшено: ${BUILDINGS[entity.type].name} ур. ${entity.level}` : `Построено: ${BUILDINGS[job.type].name}`);
-      const tile = state.mapIndex.get(job.tileId);
-      connectRoadsForTile(tile);
     }
   }
   if (done.length) {
     refreshConstructionOverlays();
     updateTerritoryOverlay(sceneCtx, state);
   }
-  renderRoads(sceneCtx, state);
 }
 
-function connectRoadsForTile(tile) { return; }
-
-
-
-function updateRallyFlags() {
-  state.buildings.forEach((b) => {
-    if (!b.rallyTileId) {
-      if (b.rallyMarker) {
-        sceneCtx.groups.effects.remove(b.rallyMarker);
-        b.rallyMarker = null;
-      }
-      return;
-    }
-    const tile = state.mapIndex.get(b.rallyTileId);
-    if (!tile) return;
-    if (!b.rallyMarker) {
-      const marker = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.25, 6), new THREE.MeshStandardMaterial({ color: 0x6a4923, roughness: 1 }));
-      pole.position.y = 0.62;
-      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.28, 0.04), new THREE.MeshStandardMaterial({ color: 0xc54028, emissive: 0x5a1f12, emissiveIntensity: 0.2 }));
-      flag.position.set(0.28, 1.0, 0);
-      marker.add(pole, flag);
-      sceneCtx.groups.effects.add(marker);
-      b.rallyMarker = marker;
-    }
-    b.rallyMarker.position.set(tile.pos.x, getTerrainY(tile.pos.x, tile.pos.z) + 0.05, tile.pos.z);
-    b.rallyMarker.rotation.y += 0.01;
-  });
-}
+function connectRoadsForTile(tile) {}
 
 function updateDayNightVisual(dt) {
   const t = (state.dayTime % GAME_CONFIG.dayDuration) / GAME_CONFIG.dayDuration;
@@ -679,7 +625,8 @@ function updateHealthOverlays() {
   const active = new Set();
   const items = [
     ...state.buildings.map((b) => ({ id: `b-${b.id}`, hp: b.hp, maxHp: b.maxHp, pos: state.mapIndex.get(b.tileId)?.pos?.clone().setY(state.mapIndex.get(b.tileId)?.height + 2.2) })),
-    ...state.units.map((u) => ({ id: `u-${u.id}`, hp: u.hp, maxHp: u.maxHp, pos: u.pos.clone().setY(u.pos.y + 2.4) }))
+    ...state.units.map((u) => ({ id: `u-${u.id}`, hp: u.hp, maxHp: u.maxHp, pos: u.pos.clone().setY(u.pos.y + 2.4) })),
+    ...state.enemyCamps.map((c) => ({ id: `c-${c.id}`, hp: c.hp, maxHp: c.maxHp, pos: c.pos.clone().setY((c.pos.y || 0) + 2.8) }))
   ];
   items.forEach((item) => {
     if (!item.pos || item.hp >= item.maxHp || item.maxHp <= 0) return;
@@ -773,7 +720,6 @@ async function animate(now = performance.now()) {
 
   updateConstructionOverlays();
   updateHealthOverlays();
-  updateRallyFlags();
   updateDayNightVisual(rawDt * Math.max(state.timeScale, .3));
   sceneCtx.controls.update();
   sceneCtx.composer.render();
