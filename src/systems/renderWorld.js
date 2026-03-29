@@ -84,43 +84,38 @@ function decorChoices(tile) {
   const list = [];
   switch (tile.type) {
     case 'forest':
-      list.push(r(1) > .5 ? 'pineAlt' : 'pine');
-      if (r(2) > .28) list.push(r(4) > .52 ? 'tree' : 'pineRound');
-      if (r(3) > .72) list.push('logs');
-      if (r(5) > .9) list.push('hut');
+      list.push(r(1) > .45 ? 'pineAlt' : 'pine');
+      if (r(2) > .52) list.push('tree');
+      if (r(3) > .68) list.push('logs');
+      if (r(4) > .82) list.push('hut');
       break;
     case 'grass':
-      if (r(1) > .46) list.push(r(6) > .5 ? 'tree' : 'pineRound');
-      if (r(2) > .84) list.push('logs');
-      if (r(3) > .93) list.push('shack');
+      if (r(1) > .55) list.push('tree');
+      if (r(2) > .72) list.push('logs');
+      if (r(3) > .85) list.push('house');
       break;
     case 'fertile':
-      list.push('crops');
-      if (r(2) > .42) list.push('crops');
-      if (r(3) > .84) list.push('tree');
+      if (r(2) > .58) list.push('tree');
       break;
     case 'rock':
-      list.push(r(1) > .52 ? 'goldRock' : 'rocks');
-      if (r(2) > .36) list.push('rocks');
-      if (r(3) > .78) list.push(r(7) > .5 ? 'mountain' : 'mountainGroup');
+      list.push(r(1) > .58 ? 'goldRock' : 'rocks');
+      if (r(2) > .5) list.push('rocks');
+      if (r(3) > .7) list.push('mountain');
       break;
     case 'hill':
-      list.push(r(1) > .54 ? 'mountain' : 'rocks');
-      if (r(2) > .48) list.push('mountainGroup');
-      if (r(3) > .68) list.push('pineRound');
-      if (r(4) > .92) list.push('watchTower');
+      list.push(r(1) > .45 ? 'mountainGroup' : 'rocks');
+      if (r(2) > .58) list.push('tree');
+      if (r(3) > .78) list.push('watchTower');
       break;
     case 'river':
-      if (r(1) > .58) list.push('crops');
-      if (r(2) > .7) list.push('tree');
-      if (r(3) > .92) list.push('shack');
+      if (r(1) > .66) list.push('tree');
+      if (r(2) > .72) list.push('shack');
       break;
     case 'sacred':
-      if (r(1) > .38) list.push('tree');
-      if (r(2) > .82) list.push('rocks');
+      if (r(1) > .5) list.push('tree');
       break;
   }
-  return list.filter(Boolean).slice(0, 3);
+  return list.filter(Boolean).slice(0, 2);
 }
 
 export function renderTiles(sceneCtx, state) {
@@ -154,30 +149,17 @@ export function updateTerritoryOverlay(sceneCtx, state) {
   ring.geometry = new THREE.RingGeometry(state.territoryRadius - .15, state.territoryRadius + .1, 128);
 }
 
-export function clearBuildHints(sceneCtx, state) {
-  state.map.forEach((tile) => {
-    if (!tile.mesh?.material) return;
-    tile.mesh.material.opacity = 0;
-    tile.mesh.material.color.setHex(0xffffff);
-  });
-}
-
-export function showBuildHints(sceneCtx, state, type, canPlaceBuilding) {
-  state.map.forEach((tile) => {
-    if (!tile.mesh?.material) return;
-    const allowed = canPlaceBuilding(state, type, tile);
-    tile.mesh.material.opacity = allowed ? 0.2 : 0.08;
-    tile.mesh.material.color.setHex(allowed ? 0x89d76e : 0xb85748);
-  });
-}
-
 export function renderRoads(sceneCtx, state) {
-  const { groups } = sceneCtx;
-  groups.roads.clear();
+  sceneCtx.groups.roads.clear();
 }
 
-async function spawnDecorModel(sceneCtx, tile, key, slot = 0) {
+function tileNearWater(state, tile) {
+  return state.map.some((other) => other.type === 'water' && other.pos.distanceTo(tile.pos) < 2.6);
+}
+
+async function spawnDecorModel(sceneCtx, state, tile, key, slot = 0) {
   if (!key || tile.buildingId || tile.type === 'water') return;
+  if (['tree','oak','pine','pineAlt','pineRound','house','hut','shack'].includes(key) && tileNearWater(state, tile)) return;
   const cfg = DECOR_MODELS[key];
   if (!cfg) return;
   try {
@@ -187,13 +169,12 @@ async function spawnDecorModel(sceneCtx, tile, key, slot = 0) {
     const seed = Math.sin(tile.q * 53.2 + tile.r * 71.9 + slot * 19.3) * 43758.5453;
     const rand = seed - Math.floor(seed);
     const angle = rand * Math.PI * 2;
-    const radius = slot === 0 ? 0.18 + rand * 0.18 : 0.42 + slot * 0.22;
+    const radius = slot === 0 ? 0.28 : 0.55 + slot * 0.2;
     const x = tile.pos.x + Math.cos(angle) * radius;
     const z = tile.pos.z + Math.sin(angle) * radius;
     const point = getTerrainPoint(x, z);
-    if (!point || point.y <= GAME_CONFIG.terrain.waterLevel + 0.05) return;
-    const y = point.y + (cfg.y || 0.0);
-    model.scale.setScalar((cfg.scale || 0.25) * (0.94 + rand * 0.22));
+    const y = point.y + (cfg.y || 0.0) + 0.01;
+    model.scale.setScalar((cfg.scale || 0.25) * (0.92 + rand * 0.16));
     model.position.set(point.x, y, point.z);
     model.rotation.y = rand * Math.PI * 2;
     model.traverse((obj) => {
@@ -218,7 +199,7 @@ export async function populateDecorModels(sceneCtx, state) {
     choices.forEach((c, idx) => {
       const density = Math.abs(Math.sin(tile.q * 17.7 + tile.r * 9.3 + idx));
       if (density < (1 - GAME_CONFIG.decorModelDensity)) return;
-      tasks.push(spawnDecorModel(sceneCtx, tile, c, idx));
+      tasks.push(spawnDecorModel(sceneCtx, state, tile, c, idx));
     });
   }
   // avoid blocking on any single failed asset

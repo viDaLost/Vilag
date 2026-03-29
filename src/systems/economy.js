@@ -36,16 +36,16 @@ export function applyRealTimeEconomy(state, dt) {
   if (state.techs.has('dynasty')) income.stability += .03;
 
   state.resources.gold += income.gold * dt;
-  state.resources.food += income.food * dt;
-  state.resources.wood += income.wood * dt;
-  state.resources.stone += income.stone * dt;
+  state.resources.food += (income.food * 0.12) * dt;
+  state.resources.wood += (income.wood * 0.08) * dt;
+  state.resources.stone += (income.stone * 0.08) * dt;
   state.resources.prestige += income.prestige * dt;
   state.resources.knowledge += income.knowledge * dt;
   state.resources.stability = clamp(state.resources.stability + income.stability * dt, 0, 100);
   state.resources.army += income.army * dt;
 
   const housingBonus = state.buildings.filter((b) => ['granary','market','temple'].includes(b.type)).reduce((s,b)=>s + Math.max(0, b.level-1), 0);
-  const capBase = 18 + Math.round(income.populationCap) + housingBonus;
+  const capBase = 10 + Math.round(income.populationCap) + housingBonus;
   state.resources.populationCap = Math.min(GAME_CONFIG.maxPopulationSoft, capBase);
 
   const foodDrain = (state.resources.population * 0.045 + state.units.filter((u) => !u.hostile && u.type !== 'worker').length * 0.03) * dt;
@@ -61,7 +61,7 @@ export function applyRealTimeEconomy(state, dt) {
   if (state.resources.food < 12) state.resources.threat = clamp(state.resources.threat + dt * .18, 0, 100);
   if (state.resources.stability > 82) state.resources.prestige += dt * .035;
   if (freeWorkers < Math.max(1, Math.ceil(staffedDemand * 0.12))) state.resources.stability = clamp(state.resources.stability - dt * 0.06, 0, 100);
-  state.resources.threat = clamp(state.resources.threat + dt * (.038 + state.era * .01) - Math.min(0.05, income.defense * .0042), 0, 100);
+  state.resources.threat = clamp(state.resources.threat + dt * (.05 + state.era * .012) - Math.min(0.05, income.defense * .0042), 0, 100);
 }
 
 export function updateConstruction(state, dt) {
@@ -113,7 +113,7 @@ export function updateObjectives(state) {
     if (obj.done) return;
     let current = 0;
     if (obj.metric === 'food') current = state.resources.food;
-    if (obj.metric === 'roads') current = state.resources.roads;
+    if (obj.metric === 'economyReady') current = state.buildings.filter((b) => ['farm','lumber','mine'].includes(b.type)).length;
     if (obj.metric === 'armyUnits') current = state.stats.armyUnits;
     if (obj.metric === 'wonderBuilt') current = state.stats.wonderBuilt;
     if (current >= obj.target) {
