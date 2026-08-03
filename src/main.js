@@ -408,4 +408,678 @@ function openTappedBuildingMenu(tile, building) {
       notify(ok ? 'Рабочий освобождён' : 'В здании нет назначенных рабочих');
       openTappedBuildingMenu(tile, building);
     },
-    priority: () => 
+    priority: () => {
+      cycleBuildingPriority(building);
+      notify('Приоритет рабочих изменён');
+      openTappedBuildingMenu(tile, building);
+    },
+    demolish: () => {
+      if (!destroyBuilding(sceneCtx, state, building)) return;
+      spawnCollapse(sceneCtx, building.pos.clone().setY(building.surfaceY + .5));
+      state.roadsDirty = true;
+      notify(`Постройка снесена: ${BUILDINGS[building.type].name}`);
+      closeDrawer();
+      state.selected = null;
+      updateSelection(state);
+    },
+  });
+}
+
+function onTileSelected(tile) {
+  state.selected = { kind: 'tile', ref: tile };
+  highlightSelection();
+  const building = tile.buildingId ? state.buildings.find((candidate) => candidate.id === tile.buildingId) : null;
+
+  if (state.placementMode?.type === 'rally') {
+    const source = getBuildingById(state, state.placementMode.buildingId);
+    if (source && tile.type !== 'water') {
+      source.rallyPos = tile.pos.clone();
+      notify(`Точка сбора назначена: ${BUILDINGS[source.type].name}`);
+    }
+    state.placementMode = null;
+    updateCommandBanner();
+    return;
+  }
+
+  if (state.placementMode?.type === 'unit-command') {
+    if (tile.type === 'water') return notify('Юниты не могут пройти по глубокой воде');
+    issueFormationOrder(tile.pos);
+    state.placementMode = null;
+    updateCommandBanner();
+    updateSelection(state);
+    return;
+  }
+
+  if (state.selectedBuildType) tryPlaceBuilding(tile);
+  else if (building) openTappedBuildingMenu(tile, building);
+  updateSelection(state);
+}
+
+function onTileDoubleSelected(tile) {
+  state.selected = { kind: 'tile', ref: tile };
+  highlightSelection();
+  const building = tile.buildingId ? state.buildings.find((candidate) => candidate.id === tile.buildingId) : null;
+  if (building) {
+    openTappedBuildingMenu(tile, building);
+    updateSelection(state);
+    return;
+  }
+  const terrain = sampleTerrain(state, tile.pos.x, tile.pos.z);
+  if (!isTileInsideTerritory(state, tile.pos.x, tile.pos.z) || terrain.type === 'water') {
+    notify('Земля вне владений или скрыта глубокой водой');
+    return;
+  }
+  if (state.lastQuickBuildType && canPlaceBuilding(state, state.lastQuickBuildType, tile.pos.x, tile.pos.z)) {
+    tryPlaceBuilding(tile, state.lastQuickBuildType);
+    return;
+  }
+  openQuickBuildMenu(state, tile, (type) => tryPlaceBuilding(tile, type));
+  updateSelection(state);
+}
+
+function onUnitSelected(unit, event = null) {
+  state.selected = { kind: 'unit', ref: unit };
+  state.selectedUnits = unit.hostile ? [] : [unit];
+  state.placementMode = null;
+  updateCommandBanner();
+  if (!unit.hostile) openUnitActionMenu(unit, event);
+  highlightSelection();
+  updateSelection(state);
+}
+
+function onResourceSelected(resource) {
+  state.selected = { kind: 'resource', ref: resource };
+  closeUnitActionMenu();
+  updateSelection(state);
+  openDrawer(
+    resource.kind === 'tree' ? 'Лесной ресурс' : resource.isGold ? 'Золотоносная порода' : 'Каменный ресурс',
+    `Осталось ${Math.round(resource.hp)} из ${resource.maxHp}`,
+    `<div class="list-item">${resource.kind === 'tree' ? 'Постройте лесопилку поблизости: назначенный рабочий будет рубить дерево и доставлять древесину.' : 'Постройте шахту на холме или скале: рабочий будет добывать камень и золото.'}</div>`,
+  );
+}
+
+function onCampSelected(camp) {
+  state.selected = { kind: 'camp', ref: camp };
+  state.placementMode = null;
+  closeUnitActionMenu();
+  updateCommandBanner();
+  updateSelection(state);
+  const garrison = state.units.filter((unit) => unit.hostile && !unit.dead && unit.homeCampId === camp.id).length;
+  openDrawer(
+    campFactionLabel(camp),
+    `Вражеский лагерь • HP ${Math.round(camp.hp)} / ${Math.round(camp.maxHp)}`,
+    `<div class="list-item"><strong>Гарнизон:</strong> ${garrison}<br><strong>Запасы:</strong> пища ${Math.round(camp.stock?.food || 0)} • металл ${Math.round(camp.stock?.metal || 0)}<br>Лагерь снабжает набеги и восстанавливает гарнизон. Его уничтожение ослабит угрозу и принесёт золото.</div><button class="card-btn" data-camp-action="attack"><strong>⚔️ Направить армию</strong><small>Все свободные воины атакуют этот лагерь</small></button>`,
+  );
+  const attackButton = document.querySelector('[data-camp-action="attack"]');
+  if (attackButton) attackButton.onclick = () => {
+    state.selectedUnits = state.units.filter((unit) => !unit.hostile && unit.type !== 'worker' && !unit.dead);
+    if (!state.selectedUnits.length) return notify('Сначала обучите воинов в столице или казармах');
+    issueFormationOrder(camp.pos);
+    closeDrawer();
+  };
+}
+
+function issueFormationOrder(point) {
+  const units = state.selectedUnits.filter((unit) => !unit.dead && !unit.hostile);
+  const columns = Math.ceil(Math.sqrt(units.length));
+  units.forEach((unit, index) => {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    const x = point.x + (column - (columns - 1) / 2) * .8;
+    const z = point.z + (row - (Math.ceil(units.length / columns) - 1) / 2) * .8;
+    const target = findNearestWalkable(state, x, z, 5) || point.clone();
+    unit.manualTarget = target.clone();
+    unit.commandTarget = target.clone();
+    unit.patrolCenter = target.clone();
+    unit.path = [];
+    unit.pathDestinationKey = null;
+    unit.forceJob = false;
+    unit.mode = 'move';
+  });
+  if (units.length) notify(units.length === 1 ? 'Юнит получил приказ' : `Отряд (${units.length}) движется строем`);
+}
+
+function highlightSelection() {
+  state.buildings.forEach((building) => { if (building.selection) building.selection.material.opacity = 0; });
+  if (state.selected?.kind !== 'tile') return;
+  const building = getBuildingOnTile(state, state.selected.ref);
+  if (building?.selection) building.selection.material.opacity = .7;
+}
+
+function ensureUnitActionMenu() {
+  let menu = document.getElementById('unit-action-menu');
+  if (menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'unit-action-menu';
+  menu.className = 'glass-panel';
+  menu.innerHTML = `
+    <div class="panel-title">Команды юнита</div>
+    <button class="card-btn" data-unit-action="move"><strong>📍 Двигаться / охранять</strong></button>
+    <button class="card-btn" data-unit-action="work"><strong>🧑‍🌾 Найти работу</strong></button>
+  `;
+  $('#ui-root').appendChild(menu);
+  menu.querySelector('[data-unit-action="move"]').onclick = () => {
+    const unit = state.selected?.ref;
+    if (!unit || unit.hostile) return;
+    state.selectedUnits = [unit];
+    state.placementMode = { type: 'unit-command' };
+    updateCommandBanner('Выберите точку движения или охраны');
+    closeUnitActionMenu();
+    updateSelection(state);
+  };
+  menu.querySelector('[data-unit-action="work"]').onclick = () => {
+    const unit = state.selected?.ref;
+    if (!unit || unit.hostile || unit.type !== 'worker') return notify('Эта команда доступна только рабочему');
+    unit.assignedBuildingId = null;
+    unit.forceJob = true;
+    unit.manualTarget = null;
+    unit.commandTarget = null;
+    unit.resourceTargetId = null;
+    notify('Рабочий ищет свободное место с учётом приоритетов');
+    closeUnitActionMenu();
+  };
+  document.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('#unit-action-menu')) return;
+    closeUnitActionMenu();
+  });
+  return menu;
+}
+
+function openUnitActionMenu(unit, event) {
+  const menu = ensureUnitActionMenu();
+  const workButton = menu.querySelector('[data-unit-action="work"]');
+  workButton.style.display = unit.type === 'worker' ? '' : 'none';
+  const x = event?.clientX ?? window.innerWidth * .5;
+  const y = event?.clientY ?? window.innerHeight * .55;
+  menu.style.left = `${Math.min(window.innerWidth - 230, Math.max(8, x - 24))}px`;
+  menu.style.top = `${Math.min(window.innerHeight - 175, Math.max(110, y - 18))}px`;
+  menu.classList.add('visible');
+}
+
+function closeUnitActionMenu() {
+  document.getElementById('unit-action-menu')?.classList.remove('visible');
+}
+
+function hookButtons() {
+  $$('[data-action]').forEach((button) => { button.onclick = () => handleAction(button.dataset.action); });
+  $$('[data-speed]').forEach((button) => {
+    button.onclick = () => setSimulationSpeed(Number(button.dataset.speed));
+  });
+  updateSpeedButtons();
+}
+
+function handleAction(action) {
+  if (action === 'focus-capital') focusCapital();
+  if (action === 'build-menu') {
+    openBuildMenu(state, (type) => {
+      state.selectedBuildType = type;
+      state.placementMode = { type: 'building', buildingType: type };
+      closeDrawer();
+      showGhost(type);
+      updateCommandBanner(`Выберите место: ${BUILDINGS[type].name}`);
+    });
+  }
+  if (action === 'train-menu') {
+    openTrainMenu(state, () => {});
+    bindTrainButtons();
+  }
+  if (action === 'research-menu') openResearchMenu(state, notify);
+  if (action === 'select-all-army') {
+    state.selectedUnits = state.units.filter((unit) => !unit.hostile && unit.type !== 'worker' && !unit.dead);
+    state.placementMode = state.selectedUnits.length ? { type: 'unit-command' } : null;
+    if (state.selectedUnits.length) updateCommandBanner(`Выбрана армия: ${state.selectedUnits.length}. Укажите точку.`);
+    else notify('В державе пока нет воинов');
+  }
+  if (action === 'game-menu') showGameMenu();
+  if (action === 'cancel-mode') cancelPlacementMode();
+}
+
+function focusCapital() {
+  const capital = getBuildingById(state, state.capitalId);
+  if (!capital) return;
+  const y = capital.surfaceY || 0;
+  sceneCtx.controls.target.set(capital.pos.x, y, capital.pos.z);
+  const distance = window.innerWidth < 700 ? 18 : 24;
+  sceneCtx.camera.position.set(capital.pos.x + distance * .72, y + distance * .82, capital.pos.z + distance * .64);
+  closeDrawer();
+}
+
+function bindTrainButtons() {
+  $$('[data-unit-type]').forEach((button) => {
+    button.onclick = () => {
+      const building = getBuildingById(state, button.dataset.trainBuilding);
+      const unitType = button.dataset.unitType;
+      const unit = UNITS[unitType];
+      if (!building || !unit) return;
+      if (state.era < (unit.minEra ?? 0)) return notify('Тип войск ещё не открыт этой эпохой');
+      const queuedPopulation = state.buildings.reduce((sum, item) => sum + (item.trainQueue?.length || 0), 0);
+      if (state.resources.population + queuedPopulation >= state.resources.populationCap) return notify('Нет места для новых жителей: улучшите столицу или амбар');
+      if (!hasCost(state.resources, unit.cost)) return notify('Недостаточно ресурсов на обучение');
+      payCost(state.resources, unit.cost);
+      queueTraining(building, unitType);
+      notify(`Добавлен в очередь: ${unit.name}`);
+      updateHud(state);
+      openTrainMenu(state, () => {});
+      bindTrainButtons();
+    };
+  });
+}
+
+function setSimulationSpeed(speed) {
+  if (speed === 0) {
+    if (state.timeScale > 0) lastKnownSpeed = state.timeScale;
+    state.paused = true;
+    state.timeScale = 0;
+  } else {
+    lastKnownSpeed = speed;
+    state.timeScale = speed;
+    state.paused = false;
+  }
+  updateSpeedButtons();
+}
+
+function updateSpeedButtons() {
+  $$('[data-speed]').forEach((button) => {
+    const speed = Number(button.dataset.speed);
+    button.classList.toggle('active', state.paused ? speed === 0 : speed === state.timeScale);
+  });
+}
+
+function updateCommandBanner(message = '') {
+  const banner = $('#command-banner');
+  const mode = state.selectedBuildType || state.placementMode;
+  if (!mode) {
+    banner.classList.add('hidden');
+    return;
+  }
+  $('#command-text').textContent = message || (state.selectedBuildType ? `Разместите: ${BUILDINGS[state.selectedBuildType].name}` : 'Выберите точку');
+  banner.classList.remove('hidden');
+}
+
+function cancelPlacementMode(showNotice = true) {
+  state.selectedBuildType = null;
+  state.placementMode = null;
+  removeGhost();
+  updateCommandBanner();
+  if (showNotice) notify('Режим команды отменён');
+}
+
+async function showGhost(type) {
+  removeGhost();
+  const group = new THREE.Group();
+  const fallback = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.12, .12, 16), new THREE.MeshBasicMaterial({ color: 0xb3ff84, transparent: true, opacity: .32 }));
+  group.add(fallback);
+  ghostMesh = group;
+  sceneCtx.groups.ghosts.add(group);
+  try {
+    const model = await createGhostBuildingMesh(type);
+    if (model && ghostMesh === group) group.add(model);
+  } catch { /* the footprint remains available */ }
+  sceneCtx.renderer.domElement.addEventListener('pointermove', pointerGhostMove);
+}
+
+function pointerGhostMove(event) {
+  if (!ghostMesh || !state.selectedBuildType) return;
+  const rect = sceneCtx.renderer.domElement.getBoundingClientRect();
+  const pointer = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(pointer, sceneCtx.camera);
+  const hit = raycaster.intersectObject(sceneCtx.groups.tiles, true).find((candidate) => candidate.object.name === 'terrain-mesh');
+  if (!hit) return;
+  ghostMesh.position.copy(hit.point);
+  const valid = canPlaceBuilding(state, state.selectedBuildType, hit.point.x, hit.point.z);
+  ghostMesh.traverse((object) => {
+    if (!object.isMesh || !object.material) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.forEach((material) => material.color?.setHex(valid ? 0xb3ff84 : 0xff786b));
+  });
+}
+
+function removeGhost() {
+  if (!ghostMesh) return;
+  sceneCtx.groups.ghosts.remove(ghostMesh);
+  ghostMesh = null;
+  sceneCtx.renderer.domElement.removeEventListener('pointermove', pointerGhostMove);
+}
+
+function showPrologue() {
+  openModal(
+    'Клятва Великой Реки',
+    CAMPAIGN_CHAPTERS[0].name,
+    `<p>Поселенцы нашли долину, где река кормит поля, лес даёт древесину, а восточные холмы скрывают камень. Но по окраинам уже горят костры вражеских лагерей.</p><p><strong>Первая задача:</strong> наладьте три промысла, запасите пищу и увеличьте поселение. Дальнейшие главы откроются последовательно.</p>`,
+    [{ label: 'Принять клятву', primary: true, onClick: closeModal }, { label: 'Как играть', onClick: showRules }],
+  );
+}
+
+function showContinueMessage() {
+  const chapter = CAMPAIGN_CHAPTERS[state.campaign.chapter] || CAMPAIGN_CHAPTERS[0];
+  openModal(
+    'Держава восстановлена',
+    chapter.name,
+    `<p>Сохранение загружено. Мир, постройки, очереди, рабочие назначения, лагеря и ход кампании восстановлены.</p><p>${chapter.desc}</p>`,
+    [{ label: 'Продолжить', primary: true, onClick: closeModal }, { label: 'Новая кампания', onClick: confirmNewGame }],
+  );
+}
+
+function showRules() {
+  openModal(
+    'Совет правителю',
+    'Управление и игровые системы',
+    `<h3>Кампания</h3><p>Четыре главы ведут от первого хозяйства к финальному выбору: Чудо света или уничтожение всех лагерей. Текущие цели показаны слева на ПК и в меню на мобильном.</p><h3>Экономика</h3><p>Фермы производят пищу. Рабочие лесопилок и шахт ходят к конечным ресурсам и доставляют добычу. Рынки и порты усиливаются дорогами. Амбары увеличивают вместимость и население.</p><h3>Бой и NPC</h3><p>Воины охраняют точку приказа, сами замечают врагов и используют строй. Рабочие убегают от опасности. Вражеские лагеря копят припасы, держат гарнизон, совершают набеги и отступают для лечения.</p><h3>Управление</h3><p>Касание выбирает объект; перетаскивание двигает камеру; два пальца меняют масштаб и угол. На ПК используйте правую кнопку для вращения и колесо для масштаба. Миникарта переносит камеру.</p>`,
+    [{ label: 'Понятно', primary: true, onClick: closeModal }],
+  );
+}
+
+function showGameMenu() {
+  const chapter = CAMPAIGN_CHAPTERS[state.campaign.chapter];
+  openModal(
+    'Меню державы',
+    `${chapter?.name || 'Кампания'} • графика: ${sceneCtx.quality.name}`,
+    `<p>${chapter?.desc || ''}</p><p>Автосохранение выполняется каждые ${GAME_CONFIG.autosaveEvery} секунд и при сворачивании вкладки.</p>`,
+    [
+      { label: 'Продолжить', primary: true, onClick: closeModal },
+      { label: 'Сохранить сейчас', onClick: () => { notify(saveGame(state) ? 'Игра сохранена' : 'Не удалось сохранить игру'); closeModal(); } },
+      { label: 'Правила', onClick: showRules },
+      { label: 'Новая кампания', onClick: confirmNewGame },
+    ],
+  );
+}
+
+function confirmNewGame() {
+  openModal(
+    'Начать заново?',
+    'Текущее локальное сохранение будет удалено',
+    '<p>Это действие нельзя отменить. Будет создана новая карта с другим расположением долины и ресурсов.</p>',
+    [
+      { label: 'Отмена', primary: true, onClick: showGameMenu },
+      { label: 'Удалить и начать', onClick: () => { clearSave(); window.location.reload(); } },
+    ],
+  );
+}
+
+function processFinishedConstruction() {
+  const done = collectFinishedConstruction(state);
+  for (const job of done) {
+    removeConstructionVisual(job);
+    const entity = finishConstruction(sceneCtx, state, job);
+    if (!entity) continue;
+    notify(job.mode === 'upgrade' ? `Улучшено: ${BUILDINGS[entity.type].name}, уровень ${entity.level}` : `Построено: ${BUILDINGS[entity.type].name}`);
+    state.roadsDirty = true;
+  }
+  if (done.length) {
+    refreshConstructionOverlays();
+    updateTerritoryOverlay(sceneCtx, state);
+  }
+}
+
+function handleCampaignEvent(event) {
+  event.completed.forEach((objective) => notify(`Цель выполнена: ${objective.title}`));
+  if (event.chapterAdvanced) {
+    const chapter = CAMPAIGN_CHAPTERS[state.campaign.chapter];
+    openModal(`Открыта глава`, chapter.name, `<p>${chapter.desc}</p>`, [{ label: 'Продолжить', primary: true, onClick: closeModal }]);
+  }
+  if (event.victory && !state.gameEnded) {
+    state.gameEnded = true;
+    const peaceful = event.victory === 'wonder';
+    openModal(
+      peaceful ? 'Чудо Великой Реки' : 'Хозяин долины',
+      peaceful ? 'Мирное наследие завершено' : 'Военное наследие завершено',
+      `<p>${peaceful ? 'Народы долины признали величие Чуда, и караваны понесли славу державы за горизонт.' : 'Последний лагерь пал. Дороги долины безопасны, а границы державы больше некому оспаривать.'}</p><p>Победа достигнута. Игру можно продолжать без ограничения.</p>`,
+      [{ label: 'Продолжить мир', primary: true, onClick: closeModal }],
+    );
+  }
+}
+
+function checkDefeat() {
+  if (state.gameEnded) return;
+  const capital = getCapital(state);
+  if (capital && capital.hp > 0) return;
+  state.gameEnded = true;
+  setSimulationSpeed(0);
+  openModal(
+    'Держава пала',
+    'Столица разрушена',
+    '<p>Вражеский штурм уничтожил столицу. Начните новую кампанию или перезагрузите последнее сохранение.</p>',
+    [{ label: 'Новая кампания', primary: true, onClick: confirmNewGame }],
+  );
+}
+
+function stepSimulation(dt) {
+  updateEnvironmentState(state, dt);
+  applyRealTimeEconomy(state, dt);
+  updateConstruction(state, dt);
+  processFinishedConstruction();
+  updateEra(state);
+  const completedTech = updateResearch(state, dt);
+  if (completedTech) notify('Исследование завершено');
+  updateTraining(sceneCtx, state, dt, notify);
+  updateDefense(sceneCtx, state, dt);
+  updateUnits(sceneCtx, state, dt, notify);
+  updateProjectiles(sceneCtx, state, dt);
+  updateEnemyWaves(sceneCtx, state, dt, notify);
+  updateResourceRegrowth(state);
+  handleCampaignEvent(updateObjectives(state));
+
+  if (state.resources.population >= state.territoryGrowthAt) {
+    state.territoryGrowthAt += 7;
+    state.territoryRadius += .85;
+    updateTerritoryOverlay(sceneCtx, state);
+    notify('Границы державы расширились вместе с населением');
+  }
+  autoSpawnWorkers(sceneCtx, state, dt, notify);
+  if (state.seasonTime >= GAME_CONFIG.seasonDuration) {
+    state.seasonTime = 0;
+    const weather = maybeChangeWeather(state);
+    notify(`Погода изменилась: ${WEATHER_TYPES[weather]?.name || weather}`);
+  }
+  if (state.roadsDirty) rebuildAndRenderRoads();
+  spawnConstructionDust(dt);
+  maybeAutoSave(dt);
+  checkDefeat();
+}
+
+function maybeAutoSave(dt) {
+  state.autosaveTimer += dt;
+  if (state.autosaveTimer < GAME_CONFIG.autosaveEvery) return;
+  state.autosaveTimer = 0;
+  saveGame(state);
+}
+
+function updateDayNightVisual(dt) {
+  const progress = (state.dayTime % GAME_CONFIG.dayDuration) / GAME_CONFIG.dayDuration;
+  const angle = progress * Math.PI * 2 - Math.PI * .35;
+  const daylight = clamp(Math.sin(angle) * .72 + .5, .08, 1);
+  sceneCtx.sun.position.set(Math.cos(angle) * 42, 8 + Math.max(0, Math.sin(angle)) * 34, Math.sin(angle) * 22 - 8);
+  const weatherLight = ({ clear: 1, rain: .78, mist: .72, dust: .7, snow: .82 })[state.weather] || 1;
+  sceneCtx.sun.intensity = (.45 + daylight * 1.75) * weatherLight;
+  sceneCtx.hemi.intensity = .65 + daylight * 1.15;
+  sceneCtx.ambient.intensity = .45 + daylight * .55;
+  sceneCtx.fill.intensity = .35 + daylight * .55;
+  sceneCtx.stars.visible = daylight < .38;
+  sceneCtx.sky.material.uniforms.topColor.value.setHex(daylight > .42 ? 0x9dd0ee : 0x26345c);
+  sceneCtx.sky.material.uniforms.bottomColor.value.setHex(daylight > .42 ? 0xf3d3a0 : 0x6b3f2e);
+  sceneCtx.scene.fog.color.setHex(daylight > .42 ? 0xb8cad0 : 0x312d3c);
+  sceneCtx.cloudLayer.children.forEach((cloud, index) => {
+    cloud.rotation.y += dt * cloud.userData.drift * .08;
+    cloud.position.x += Math.sin(state.worldTime * .025 + index) * dt * .07;
+    cloud.position.z += Math.cos(state.worldTime * .02 + index) * dt * .06;
+  });
+  state.buildings.forEach((building) => {
+    if (building.glow) building.glow.intensity = (['capital', 'temple', 'tower'].includes(building.type) ? .85 : .35) + building.hitFlash * 1.4;
+    building.hitFlash = Math.max(0, building.hitFlash - dt * 3.5);
+    building.mesh.scale.setScalar(1 + building.hitFlash * .06);
+  });
+  state.enemyCamps.forEach((camp) => {
+    camp.hitFlash = Math.max(0, (camp.hitFlash || 0) - dt * 3);
+    const material = camp.mesh.userData.fallback?.material;
+    if (material) material.emissive?.setHex(camp.hitFlash > 0 ? 0x7b1d14 : 0x000000);
+  });
+}
+
+function spawnConstructionDust(dt) {
+  constructionDustTimer += dt;
+  const interval = sceneCtx.quality.name === 'mobile' ? .48 : .24;
+  if (constructionDustTimer < interval || sceneCtx.effectBursts.length > 70) return;
+  constructionDustTimer = 0;
+  for (const job of state.construction.slice(0, sceneCtx.quality.name === 'mobile' ? 4 : 8)) {
+    const dust = new THREE.Mesh(new THREE.SphereGeometry(.08, 4, 4), new THREE.MeshBasicMaterial({ color: 0xb79862, transparent: true, opacity: .4 }));
+    const height = sampleTerrainHeight(state, job.x, job.z);
+    dust.position.set(job.x + (Math.random() - .5) * .8, height + .35, job.z + (Math.random() - .5) * .8);
+    sceneCtx.groups.effects.add(dust);
+    sceneCtx.effectBursts.push({
+      id: `dust-${performance.now()}-${Math.random()}`,
+      mesh: dust,
+      vel: new THREE.Vector3((Math.random() - .5) * .22, .32, (Math.random() - .5) * .22),
+      life: .55,
+      kind: 'burst',
+    });
+  }
+}
+
+function refreshConstructionOverlays() {
+  const wrapper = $('#construction-overlays');
+  if (!wrapper) return;
+  wrapper.innerHTML = '';
+  state.construction.forEach((job) => {
+    const element = document.createElement('div');
+    element.className = 'construction-timer';
+    element.dataset.jobId = job.id;
+    wrapper.appendChild(element);
+  });
+}
+
+function updateConstructionOverlays() {
+  const wrapper = $('#construction-overlays');
+  if (!wrapper) return;
+  if (wrapper.children.length !== state.construction.length) refreshConstructionOverlays();
+  state.construction.forEach((job) => {
+    const element = wrapper.querySelector(`[data-job-id="${job.id}"]`);
+    if (!element) return;
+    const point = new THREE.Vector3(job.x, sampleTerrainHeight(state, job.x, job.z) + 2.25, job.z).project(sceneCtx.camera);
+    const x = (point.x * .5 + .5) * window.innerWidth;
+    const y = (point.y * -.5 + .5) * window.innerHeight;
+    const offscreen = point.z < -1 || point.z > 1 || x < -40 || x > window.innerWidth + 40 || y < -40 || y > window.innerHeight + 40;
+    element.style.display = offscreen ? 'none' : 'block';
+    element.style.transform = `translate(${x}px, ${y}px)`;
+    element.textContent = `${Math.max(0, Math.ceil(job.buildTime - job.progress))}с`;
+    if (job.mesh) job.mesh.rotation.y += .002;
+  });
+}
+
+function ensureHealthElement(id) {
+  const wrapper = $('#health-overlays');
+  let element = wrapper.querySelector(`[data-health-id="${id}"]`);
+  if (element) return element;
+  element = document.createElement('div');
+  element.className = 'health-bar';
+  element.dataset.healthId = id;
+  element.innerHTML = '<div class="health-caption"></div><div class="health-track"><div class="health-fill"></div></div>';
+  wrapper.appendChild(element);
+  return element;
+}
+
+function updateHealthOverlays() {
+  const wrapper = $('#health-overlays');
+  if (!wrapper) return;
+  const active = new Set();
+  const items = [
+    ...state.buildings.map((building) => ({ id: `building-${building.id}`, hp: building.hp, maxHp: building.maxHp, pos: new THREE.Vector3(building.pos.x, building.surfaceY + 2.1, building.pos.z) })),
+    ...state.units.map((unit) => ({ id: `unit-${unit.id}`, hp: unit.hp, maxHp: unit.maxHp, pos: unit.pos.clone().setY(unit.pos.y + 1.45) })),
+    ...state.enemyCamps.map((camp) => ({ id: `camp-${camp.id}`, hp: camp.hp, maxHp: camp.maxHp, pos: camp.pos.clone().setY(camp.pos.y + 2.2) })),
+  ].filter((item) => item.hp < item.maxHp && item.maxHp > 0).slice(0, 36);
+  items.forEach((item) => {
+    active.add(item.id);
+    const element = ensureHealthElement(item.id);
+    const ratio = clamp(item.hp / item.maxHp, 0, 1);
+    const point = item.pos.clone().project(sceneCtx.camera);
+    const x = (point.x * .5 + .5) * window.innerWidth;
+    const y = (point.y * -.5 + .5) * window.innerHeight;
+    const offscreen = point.z < -1 || point.z > 1 || x < -70 || x > window.innerWidth + 70 || y < -70 || y > window.innerHeight + 70;
+    element.style.display = offscreen ? 'none' : 'block';
+    element.style.transform = `translate(${x}px, ${y}px)`;
+    element.querySelector('.health-fill').style.width = `${ratio * 100}%`;
+    element.querySelector('.health-caption').textContent = `${Math.round(item.hp)} / ${Math.round(item.maxHp)}`;
+    element.classList.toggle('low', ratio < .35);
+  });
+  wrapper.querySelectorAll('.health-bar').forEach((element) => {
+    if (!active.has(element.dataset.healthId)) element.remove();
+  });
+}
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const rawDt = Math.min(.1, Math.max(0, (now - lastTime) / 1000));
+  lastTime = now;
+  if (!state.paused && state.timeScale > 0) {
+    logicAccumulator += rawDt * state.timeScale;
+    let iterations = 0;
+    while (logicAccumulator >= GAME_CONFIG.logicTick && iterations < 8) {
+      stepSimulation(GAME_CONFIG.logicTick);
+      logicAccumulator -= GAME_CONFIG.logicTick;
+      iterations += 1;
+    }
+    if (iterations === 8) logicAccumulator = Math.min(logicAccumulator, GAME_CONFIG.logicTick * 2);
+  }
+
+  hudAccumulator += rawDt;
+  minimapAccumulator += rawDt;
+  overlayAccumulator += rawDt;
+  if (hudAccumulator >= GAME_CONFIG.hudRefresh) {
+    hudAccumulator = 0;
+    updateHud(state);
+    updateSelection(state);
+  }
+  if (minimapAccumulator >= GAME_CONFIG.minimapRefresh) {
+    minimapAccumulator = 0;
+    drawMinimap(state, sceneCtx);
+  }
+  if (overlayAccumulator >= .1) {
+    overlayAccumulator = 0;
+    updateConstructionOverlays();
+    updateHealthOverlays();
+  }
+  updateDayNightVisual(rawDt * Math.max(state.timeScale || lastKnownSpeed, .25));
+  updateTerrainVisuals(state, now);
+  sceneCtx.controls.update();
+  performanceGovernor.sample(rawDt);
+  sceneCtx.render();
+}
+
+function hookLifecycle() {
+  window.addEventListener('resize', () => {
+    sceneCtx.resize();
+    refreshConstructionOverlays();
+  }, { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) return;
+    saveGame(state);
+    if (!state.paused) {
+      lastKnownSpeed = state.timeScale || 1;
+      state.paused = true;
+      state.timeScale = 0;
+      updateSpeedButtons();
+    }
+  });
+  window.addEventListener('beforeunload', () => saveGame(state));
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || window.location.protocol === 'file:') return;
+  navigator.serviceWorker.register('./sw.js').catch((error) => console.warn('Service worker unavailable', error));
+}
+
+window.setTimeout(() => {
+  if (!loadingReleased) emergencyRelease();
+}, 12_000);
+
+if (new URLSearchParams(window.location.search).has('debug')) {
+  window.__EMPIRE_DEBUG__ = {
+    state,
+    sceneCtx,
+    stepSimulation,
+    tryPlaceBuilding,
+    save: () => saveGame(state),
+  };
+}
+
+bootstrap().catch(emergencyRelease);

@@ -366,4 +366,346 @@ function updateWorker(unit, state, dt) {
 
   if (['lumber', 'mine'].includes(building.type)) {
     const kind = building.type === 'lumber' ? 'tree' : 'rock';
-    let resource = resourceById(state, unit.reso
+    let resource = resourceById(state, unit.resourceTargetId);
+    if (!resource || resource.hp <= 0) {
+      resource = nearestResource(state, building, kind);
+      unit.resourceTargetId = resource?.id || null;
+      unit.taskPhase = resource ? 'toResource' : 'toBuilding';
+    }
+    if (!resource) return { target: buildingApproach(unit, building), path: true, movedState: 'idle' };
+    if (unit.taskPhase === 'toResource') {
+      const target = new THREE.Vector3(resource.x, resource.y, resource.z);
+      if (unit.pos.distanceTo(target) <= .72) {
+        unit.taskPhase = 'gather';
+        unit.workTimer = 1.25;
+        return { target: null, movedState: 'attack' };
+      }
+      return { target, path: true, movedState: 'walk' };
+    }
+    if (unit.taskPhase === 'gather') {
+      unit.workTimer -= dt;
+      if (unit.workTimer <= 0) {
+        depleteResource(state, resource, building.type === 'lumber' ? 5 : 7);
+        unit.carrying = building.type === 'lumber'
+          ? { wood: 4.8 + building.level * 1.1 }
+          : { stone: 3.7 + building.level, gold: resource.isGold ? .9 : .2 };
+        unit.taskPhase = 'toBuilding';
+      }
+      return { target: null, movedState: 'attack' };
+    }
+    const target = buildingApproach(unit, building, .12);
+    if (unit.pos.distanceTo(target) <= .58) {
+      Object.entries(unit.carrying || {}).forEach(([key, value]) => { state.resources[key] = (state.resources[key] || 0) + value; });
+      unit.carrying = null;
+      unit.resourceTargetId = null;
+      unit.taskPhase = 'toResource';
+      return { target: null, movedState: 'idle' };
+    }
+    return { target, path: true, movedState: 'walk' };
+  }
+
+  const target = buildingApproach(unit, building, .08);
+  if (unit.pos.distanceTo(target) <= .52) return { target: null, movedState: 'idle' };
+  return { target, path: true, movedState: 'walk' };
+}
+
+function attackUnit(sceneCtx, state, unit, target) {
+  if (!target || unit.attackCooldown > 0) return;
+  unit.attackCooldown = unit.range > 2 ? 1.25 : .95;
+  unit.attackFlash = .14;
+  playOneShot(unit.mesh, 'attack');
+  const damage = unit.attack * (!unit.hostile && state.techs.has('discipline') ? 1.12 : 1);
+  if (unit.range > 2) {
+    state.projectiles.push(spawnProjectile(sceneCtx, unit.pos.clone().setY(unit.pos.y + .9), target.pos.clone().setY(target.pos.y + .8), unit.hostile ? 0xffa46d : 0xffe59e, { unitId: target.id, damage }));
+  } else {
+    applyUnitDamage(target, damage);
+  }
+}
+
+function attackBuilding(sceneCtx, state, unit, building) {
+  if (!building || unit.attackCooldown > 0) return;
+  unit.attackCooldown = unit.range > 2 ? 1.45 : 1.05;
+  unit.attackFlash = .16;
+  playOneShot(unit.mesh, 'attack');
+  const rawDamage = unit.attack * (unit.type === 'brute' ? 1.5 : 1);
+  const stoneDefense = ['wall', 'tower', 'temple'].includes(building.type) && state.techs.has('stonework') ? .82 : 1;
+  const damage = rawDamage * stoneDefense;
+  if (unit.range > 2) {
+    state.projectiles.push(spawnProjectile(sceneCtx, unit.pos.clone().setY(unit.pos.y + .95), buildingCenter(state, building), unit.hostile ? 0xffb278 : 0xffdd90, { buildingId: building.id, damage }));
+  } else {
+    building.hp -= damage;
+    building.hitFlash = .25;
+    if (building.hp <= 0) removeDestroyedBuilding(sceneCtx, state, building);
+  }
+}
+
+function nearestCamp(unit, state, maxDistance = Infinity) {
+  let best = null;
+  let distance = Infinity;
+  for (const camp of state.enemyCamps) {
+    const current = unit.pos.distanceTo(camp.pos);
+    if (camp.hp > 0 && current < distance && current <= maxDistance) { best = camp; distance = current; }
+  }
+  return { best, distance };
+}
+
+function attackCamp(sceneCtx, state, unit, camp, notify) {
+  if (!camp || unit.attackCooldown > 0) return;
+  unit.attackCooldown = unit.range > 2 ? 1.25 : .95;
+  playOneShot(unit.mesh, 'attack');
+  camp.hp -= unit.attack * (unit.range > 2 ? .9 : 1.15);
+  camp.hitFlash = .25;
+  camp.alert = (camp.alert || 0) + 3;
+  if (camp.hp > 0) return;
+  camp.hp = 0;
+  spawnCollapse(sceneCtx, camp.pos.clone().setY(camp.pos.y + .5), 0xb06845);
+  sceneCtx.groups.enemyCamps.remove(camp.mesh);
+  state.enemyCamps = state.enemyCamps.filter((candidate) => candidate.id !== camp.id);
+  state.stats.campsDestroyed += 1;
+  state.resources.gold += 28;
+  state.resources.threat = Math.max(0, state.resources.threat - 14);
+  state.units.filter((candidate) => candidate.hostile && candidate.homeCampId === camp.id).forEach((candidate) => {
+    candidate.homeCampId = null;
+    candidate.aiRole = 'raid';
+    candidate.targetBuildingId = getCapital(state)?.id || null;
+  });
+  notify('Вражеский лагерь разрушен — захвачено 28 золота');
+}
+
+function patrolTarget(unit, center) {
+  if (!center) return null;
+  const numeric = Number(unit.id.replace(/\D/g, '')) || 1;
+  const angle = performance.now() * .00035 + numeric * 1.7;
+  const radius = 1.1 + (numeric % 3) * .45;
+  return center.clone().add(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
+}
+
+function updateFriendlySoldier(sceneCtx, state, unit, notify) {
+  const { best: enemy, distance: enemyDistance } = nearestUnit(unit, state, (candidate) => candidate.hostile, unit.sight);
+  if (enemy) {
+    if (enemyDistance <= unit.range + .28) attackUnit(sceneCtx, state, unit, enemy);
+    return { target: enemy.pos, path: false, attackTarget: enemy };
+  }
+  const { best: camp, distance: campDistance } = nearestCamp(unit, state, unit.commandTarget ? 11 : 7);
+  if (camp) {
+    if (campDistance <= Math.max(1.3, unit.range + .65)) attackCamp(sceneCtx, state, unit, camp, notify);
+    return { target: camp.pos, path: true };
+  }
+  if (unit.manualTarget) return { target: unit.manualTarget, path: true, manual: true };
+  const center = unit.commandTarget || unit.patrolCenter || getCapital(state)?.pos;
+  return { target: patrolTarget(unit, center), path: true };
+}
+
+function hostileHomeCamp(state, unit) {
+  return state.enemyCamps.find((camp) => camp.id === unit.homeCampId) || null;
+}
+
+function updateHostile(sceneCtx, state, unit, dt) {
+  const camp = hostileHomeCamp(state, unit);
+  if (camp && unit.hp < unit.maxHp * .24 && unit.aiRole !== 'retreat') unit.aiRole = 'retreat';
+  if (unit.aiRole === 'retreat' && camp) {
+    if (unit.pos.distanceTo(camp.pos) < 2.2) {
+      unit.hp = Math.min(unit.maxHp, unit.hp + dt * .9);
+      if (unit.hp >= unit.maxHp * .58) unit.aiRole = 'guard';
+      return { target: null, path: false };
+    }
+    return { target: camp.pos, path: true };
+  }
+
+  const engagementRange = unit.aiRole === 'guard' ? unit.sight : unit.sight * .8;
+  const { best: defender, distance } = nearestUnit(unit, state, (candidate) => !candidate.hostile, engagementRange);
+  if (defender) {
+    if (distance <= unit.range + .28) attackUnit(sceneCtx, state, unit, defender);
+    return { target: defender.pos, path: false, attackTarget: defender };
+  }
+
+  if (unit.aiRole === 'guard' && camp) return { target: patrolTarget(unit, camp.pos), path: true };
+  let targetBuilding = state.buildings.find((building) => building.id === unit.targetBuildingId);
+  if (!targetBuilding) targetBuilding = getCapital(state) || state.buildings[0];
+  if (!targetBuilding) return { target: null };
+  unit.targetBuildingId = targetBuilding.id;
+  const approach = buildingApproach(unit, targetBuilding, unit.range > 2 ? Math.max(1.4, unit.range - .2) : .2);
+  const distanceToBuilding = unit.pos.distanceTo(approach);
+  if (distanceToBuilding <= .55 || unit.pos.distanceTo(targetBuilding.pos) <= unit.range + targetBuilding.blockRadius) attackBuilding(sceneCtx, state, unit, targetBuilding);
+  return { target: approach, path: true };
+}
+
+function destinationKey(target) {
+  return `${Math.round(target.x / 1.8)},${Math.round(target.z / 1.8)}`;
+}
+
+function movementTarget(unit, state, desired, usePath) {
+  if (!desired) return null;
+  if (!usePath || unit.pos.distanceTo(desired) < 3.2) return desired;
+  unit.repathTimer -= GAME_CONFIG.logicTick;
+  const key = destinationKey(desired);
+  if (unit.pathDestinationKey !== key || !unit.path?.length || unit.repathTimer <= 0) {
+    unit.path = findPath(state, unit.pos, desired, { maxNodes: 1000 });
+    unit.pathIndex = 0;
+    unit.pathDestinationKey = key;
+    unit.repathTimer = 2.5 + Math.random();
+  }
+  if (!unit.path.length) return desired;
+  let waypoint = unit.path[unit.pathIndex] || desired;
+  if (unit.pos.distanceTo(waypoint) < .38 && unit.pathIndex < unit.path.length - 1) {
+    unit.pathIndex += 1;
+    waypoint = unit.path[unit.pathIndex] || desired;
+  }
+  return waypoint;
+}
+
+function applySeparation(unit, state) {
+  const push = new THREE.Vector3();
+  let count = 0;
+  for (const other of state.units) {
+    if (other === unit || other.dead || other.hostile !== unit.hostile) continue;
+    const dx = unit.pos.x - other.pos.x;
+    const dz = unit.pos.z - other.pos.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= .001 || distance >= .55) continue;
+    push.x += dx / distance * (.55 - distance);
+    push.z += dz / distance * (.55 - distance);
+    count += 1;
+  }
+  if (count) unit.pos.addScaledVector(push, .16 / count);
+}
+
+function keepOutsideBuildings(unit, state) {
+  for (const building of state.buildings) {
+    const dx = unit.pos.x - building.pos.x;
+    const dz = unit.pos.z - building.pos.z;
+    const distance = Math.hypot(dx, dz);
+    const radius = Math.max(.5, (building.blockRadius || .9) * .76);
+    if (distance >= radius) continue;
+    if (distance < .001) {
+      unit.pos.x += radius;
+      continue;
+    }
+    const push = radius - distance + .02;
+    unit.pos.x += dx / distance * push;
+    unit.pos.z += dz / distance * push;
+  }
+}
+
+function moveUnit(unit, state, target, dt, usePath, attackTarget = null) {
+  const waypoint = movementTarget(unit, state, target, usePath);
+  if (!waypoint) return false;
+  const direction = new THREE.Vector3().subVectors(waypoint, unit.pos).setY(0);
+  const distance = direction.length();
+  const stopDistance = attackTarget ? Math.max(.26, unit.range * .88) : .14;
+  if (distance <= stopDistance) return false;
+  direction.normalize();
+  const previous = unit.pos.clone();
+  const weather = WEATHER_TYPES[state.weather] || WEATHER_TYPES.clear;
+  const terrain = sampleTerrain(state, unit.pos.x, unit.pos.z);
+  const terrainSpeed = ({ river: .82, rock: .74, hill: .82, forest: .88 })[terrain.type] || 1;
+  const speed = unit.speed * weather.move * terrainSpeed * roadMovementMultiplier(state, unit.pos.x, unit.pos.z);
+  unit.pos.addScaledVector(direction, speed * dt);
+  if (!isWalkable(state, unit.pos.x, unit.pos.z, { ignoreBuildings: true })) {
+    unit.pos.copy(previous);
+    unit.path = [];
+    unit.repathTimer = 0;
+    return false;
+  }
+  applySeparation(unit, state);
+  keepOutsideBuildings(unit, state);
+  const desiredYaw = Math.atan2(direction.x, direction.z) + (unit.mesh.userData.facingOffset || 0);
+  let delta = desiredYaw - unit.mesh.rotation.y;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  unit.mesh.rotation.y += delta * Math.min(1, dt * 12);
+  return true;
+}
+
+function cleanupDeadUnit(sceneCtx, state, unit, index) {
+  if (unit.dead) return;
+  unit.dead = true;
+  spawnCollapse(sceneCtx, unit.pos.clone().setY(unit.pos.y + .6), unit.hostile ? 0xd36d58 : 0x8ebbe0);
+  playOneShot(unit.mesh, 'death');
+  sceneCtx.groups.units.remove(unit.mesh);
+  state.units.splice(index, 1);
+  state.selectedUnits = state.selectedUnits.filter((selected) => selected.id !== unit.id);
+  if (unit.hostile) state.stats.raidsDefeated += 1;
+  else {
+    state.resources.population = Math.max(0, (state.resources.population || 0) - 1);
+    state.stats.armyUnits = state.units.filter((candidate) => !candidate.hostile && candidate.type !== 'worker').length;
+  }
+}
+
+function updateVisual(unit, state, dt, moved, requestedState) {
+  const visual = UNIT_VISUALS[unit.type] || UNIT_VISUALS.militia;
+  if (moved) unit.stepPhase += dt * unit.speed * visual.bobSpeed;
+  unit.baseY = sampleTerrainHeight(state, unit.pos.x, unit.pos.z);
+  unit.pos.y = unit.baseY;
+  unit.mesh.position.set(unit.pos.x, unit.baseY + .02, unit.pos.z);
+  const ring = unit.mesh.userData.ring;
+  ring.material.opacity = (unit.hostile ? .36 : .25) + unit.attackFlash * .4 + unit.hitFlash * .3;
+  ring.material.color.setHex(unit.hostile ? 0xff7c63 : 0xffd66b);
+  const body = unit.mesh.userData.body;
+  if (body) {
+    body.position.y = Math.sin(unit.stepPhase) * visual.bounce;
+    body.rotation.z = Math.sin(unit.stepPhase * .5) * visual.lean;
+  }
+  if (unit.mesh.userData.mixer) {
+    unit.mesh.userData.mixer.update(dt);
+    if (!unit.attackFlash && !unit.hitFlash) setAnimationState(unit.mesh, requestedState === 'attack' ? 'attack' : moved ? 'walk' : 'idle');
+  }
+}
+
+export function updateUnits(sceneCtx, state, dt, notify) {
+  assignWorkers(state);
+  for (let index = state.units.length - 1; index >= 0; index--) {
+    const unit = state.units[index];
+    unit.attackCooldown = Math.max(0, unit.attackCooldown - dt);
+    unit.attackFlash = Math.max(0, unit.attackFlash - dt * 2.2);
+    unit.hitFlash = Math.max(0, unit.hitFlash - dt * 3.4);
+    let decision;
+    if (unit.hostile) decision = updateHostile(sceneCtx, state, unit, dt);
+    else if (unit.type === 'worker') decision = updateWorker(unit, state, dt);
+    else decision = updateFriendlySoldier(sceneCtx, state, unit, notify);
+
+    const moved = moveUnit(unit, state, decision?.target, dt, Boolean(decision?.path), decision?.attackTarget);
+    if (decision?.manual && unit.manualTarget && unit.pos.distanceTo(unit.manualTarget) < .3) {
+      unit.manualTarget = null;
+      if (unit.type === 'worker') unit.commandTarget = null;
+      else unit.patrolCenter = unit.commandTarget?.clone() || unit.patrolCenter;
+      unit.path = [];
+      unit.mode = 'idle';
+    }
+    updateVisual(unit, state, dt, moved, decision?.movedState);
+    if (unit.hitFlash > 0 && unit.mesh.userData.animActions?.hit) playOneShot(unit.mesh, 'hit');
+    if (unit.hp <= 0) cleanupDeadUnit(sceneCtx, state, unit, index);
+  }
+}
+
+export function autoSpawnWorkers(sceneCtx, state, dt, notify) {
+  state.workerSpawnTimer += dt;
+  const spawnDelay = state.workerSpawnDelay || GAME_CONFIG.workerSpawnEvery;
+  if (state.workerSpawnTimer < spawnDelay) return;
+  state.workerSpawnTimer = 0;
+  if (state.resources.population >= state.resources.populationCap) return;
+  const workers = state.units.filter((unit) => !unit.dead && unit.type === 'worker').length;
+  const demand = state.buildings.reduce((sum, building) => sum + getBuildingWorkerDemand(building), 0);
+  if (workers >= demand + 1 || state.resources.food < 24 || state.resources.stability < 42) return;
+  const capital = getCapital(state);
+  if (!capital) return;
+  state.resources.population += 1;
+  state.resources.food -= 8;
+  const spawnPos = spawnPointNearBuilding(state, capital, workers) || capital.pos.clone();
+  spawnUnit(sceneCtx, state, 'worker', spawnPos, null, { homeBuildingId: capital.id });
+  notify('В столице появился новый рабочий');
+}
+
+export function spawnPointNearBuilding(state, building, slot = 0) {
+  if (!building) return null;
+  const center = buildingCenter(state, building);
+  const radius = Math.max(1.16, (building.blockRadius || .9) + .42);
+  const angles = [0.3, 1.34, 2.42, 3.56, 4.65, 5.6];
+  for (let attempt = 0; attempt < angles.length; attempt++) {
+    const angle = angles[(slot + attempt) % angles.length];
+    const x = center.x + Math.cos(angle) * radius;
+    const z = center.z + Math.sin(angle) * radius;
+    if (sampleTerrain(state, x, z).type !== 'water') return new THREE.Vector3(x, sampleTerrainHeight(state, x, z), z);
+  }
+  return center.clone();
+}
