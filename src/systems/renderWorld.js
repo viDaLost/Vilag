@@ -1,26 +1,28 @@
 import * as THREE from 'three';
-import { DECOR_MODELS, GAME_CONFIG } from '../config.js';
+import { GAME_CONFIG } from '../config.js';
 import { loadDecorModel } from '../core/assets.js';
-import { buildTerrain, sampleTerrainHeight } from './terrain.js';
-import { sampleTerrain } from './world.js';
+import { buildTerrain } from './terrain.js';
+import { coordinateRandom, sampleTerrain } from './world.js';
 
-async function addDistantMountains(group) {
+async function addDistantMountains(sceneCtx, state) {
+  const group = sceneCtx.groups.backdrop;
   group.clear();
-  const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xbcb2a1, roughness: 1, transparent: true, opacity: .96 });
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2;
-    const radius = 54 + (i % 5) * 4 + Math.random() * 2;
+  const count = sceneCtx.quality?.mountainCount || 9;
+  const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x8f887d, roughness: 1, transparent: true, opacity: .94 });
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + coordinateRandom(i, state.worldSeed, 4) * .14;
+    const radius = GAME_CONFIG.worldRadius + 7 + (i % 4) * 2.5;
     try {
       const model = await loadDecorModel(i % 3 === 0 ? 'mountain-group.glb' : 'mountain.glb');
-      const scale = i % 3 === 0 ? 3.2 : 2.4;
-      model.scale.setScalar(scale + Math.random() * .5);
-      model.position.set(Math.cos(angle) * radius, -1.4, Math.sin(angle) * radius);
+      const scale = (i % 3 === 0 ? 2.45 : 1.95) + coordinateRandom(i, state.worldSeed, 6) * .35;
+      model.scale.setScalar(scale);
+      model.position.set(Math.cos(angle) * radius, -1.7, Math.sin(angle) * radius);
       model.rotation.y = angle + Math.PI;
       group.add(model);
     } catch {
-      const height = 16 + Math.random() * 10;
-      const mountain = new THREE.Mesh(new THREE.ConeGeometry(7 + Math.random() * 4, height, 4), fallbackMat.clone());
-      mountain.position.set(Math.cos(angle) * radius, -1.2 + height / 2, Math.sin(angle) * radius);
+      const height = 12 + coordinateRandom(i, state.worldSeed, 9) * 8;
+      const mountain = new THREE.Mesh(new THREE.ConeGeometry(6.5, height, 5), fallbackMat);
+      mountain.position.set(Math.cos(angle) * radius, -1.4 + height / 2, Math.sin(angle) * radius);
       group.add(mountain);
     }
   }
@@ -32,135 +34,187 @@ export function renderTiles(sceneCtx, state) {
   groups.decor.clear();
   groups.overlays.clear();
   groups.backdrop.clear();
-  addDistantMountains(groups.backdrop);
 
-  const ringGeo = new THREE.RingGeometry(state.territoryRadius - .15, state.territoryRadius + .1, 128);
-  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffd66b, transparent: true, opacity: .14, side: THREE.DoubleSide }));
+  const ringGeo = new THREE.RingGeometry(state.territoryRadius - .15, state.territoryRadius + .1, 96);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffd66b, transparent: true, opacity: .2, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2;
-  ring.position.y = .08;
+  ring.position.y = .12;
   ring.name = 'territory-ring';
   groups.overlays.add(ring);
 
   buildTerrain(sceneCtx, state);
+  void addDistantMountains(sceneCtx, state);
 }
 
 export function updateTerritoryOverlay(sceneCtx, state) {
   const ring = sceneCtx.groups.overlays.getObjectByName('territory-ring');
   if (!ring) return;
   ring.geometry.dispose();
-  ring.geometry = new THREE.RingGeometry(state.territoryRadius - .15, state.territoryRadius + .1, 128);
+  ring.geometry = new THREE.RingGeometry(state.territoryRadius - .15, state.territoryRadius + .1, 96);
 }
 
-function clearGroup(group) {
-  group.traverse((obj) => {
-    if (obj.isMesh) {
-      obj.geometry?.dispose?.();
-      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose?.());
-      else obj.material?.dispose?.();
-    }
+function resourceSnapshot(state) {
+  return new Map((state.resourceSnapshot || []).map((resource) => [resource.id, resource]));
+}
+
+function setInstanceTransform(mesh, index, resource, visible = true) {
+  const matrix = new THREE.Matrix4();
+  const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, resource.rotation || 0, 0));
+  const scale = visible ? resource.scale || 1 : .0001;
+  matrix.compose(new THREE.Vector3(resource.x, resource.y, resource.z), rotation, new THREE.Vector3(scale, scale, scale));
+  mesh.setMatrixAt(index, matrix);
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+export function setResourceVisible(resource, visible) {
+  resource.visible = visible;
+  (resource.meshes || []).forEach((mesh, index) => {
+    const y = resource.y + (resource.meshOffsets?.[index] || 0);
+    setInstanceTransform(mesh, resource.instanceIndex, { ...resource, y }, visible);
   });
-  group.clear();
 }
 
-export function renderRoads(sceneCtx) {
-  clearGroup(sceneCtx.groups.roads);
-  // Roads will be completely revamped with continuous map
+function addTreeInstances(sceneCtx, resources) {
+  if (!resources.length) return;
+  const trunk = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(.09, .13, .68, 6),
+    new THREE.MeshStandardMaterial({ color: 0x6f4829, roughness: 1 }),
+    resources.length,
+  );
+  const crown = new THREE.InstancedMesh(
+    new THREE.ConeGeometry(.48, 1.28, 7),
+    new THREE.MeshStandardMaterial({ color: 0x3d6b32, roughness: 1 }),
+    resources.length,
+  );
+  trunk.name = 'resource-trees-trunks';
+  crown.name = 'resource-trees';
+  crown.userData.resourceKind = 'tree';
+  trunk.castShadow = sceneCtx.quality?.shadows;
+  crown.castShadow = sceneCtx.quality?.shadows;
+  trunk.receiveShadow = crown.receiveShadow = true;
+
+  resources.forEach((resource, index) => {
+    resource.instanceIndex = index;
+    resource.meshes = [trunk, crown];
+    resource.meshOffsets = [.34, 1.0];
+    const baseY = resource.y;
+    const trunkResource = { ...resource, y: baseY + .34 };
+    const crownResource = { ...resource, y: baseY + 1.0 };
+    setInstanceTransform(trunk, index, trunkResource, resource.visible);
+    setInstanceTransform(crown, index, crownResource, resource.visible);
+    const tint = new THREE.Color(index % 3 === 0 ? 0x568342 : index % 3 === 1 ? 0x35622f : 0x47783b);
+    crown.setColorAt(index, tint);
+  });
+  crown.instanceColor.needsUpdate = true;
+  sceneCtx.groups.decor.add(trunk, crown);
 }
 
-function decorChoices(terrainType, noise) {
-  const list = [];
-  const r = (salt) => {
-    const x = Math.sin(noise * 127.1 + salt * 74.7) * 43758.5453123;
-    return x - Math.floor(x);
-  };
-  switch (terrainType) {
-    case 'forest':
-      list.push(r(1) > .45 ? 'pineAlt' : 'pine');
-      if (r(2) > .52) list.push('tree');
-      if (r(3) > .68) list.push('logs');
-      break;
-    case 'grass':
-      if (r(1) > .85) list.push('tree');
-      break;
-    case 'fertile':
-      if (r(2) > .88) list.push('tree');
-      break;
-    case 'rock':
-      list.push(r(1) > .58 ? 'goldRock' : 'rocks');
-      if (r(2) > .5) list.push('rocks');
-      if (r(3) > .7) list.push('mountain');
-      break;
-    case 'hill':
-      list.push(r(1) > .45 ? 'mountainGroup' : 'rocks');
-      if (r(2) > .58) list.push('tree');
-      break;
-  }
-  return list.filter(Boolean).slice(0, 2);
+function addRockInstances(sceneCtx, resources) {
+  if (!resources.length) return;
+  const rocks = new THREE.InstancedMesh(
+    new THREE.DodecahedronGeometry(.43, 0),
+    new THREE.MeshStandardMaterial({ color: 0x85817a, roughness: .94, metalness: .04 }),
+    resources.length,
+  );
+  rocks.name = 'resource-rocks';
+  rocks.userData.resourceKind = 'rock';
+  rocks.castShadow = sceneCtx.quality?.shadows;
+  rocks.receiveShadow = true;
+  resources.forEach((resource, index) => {
+    resource.instanceIndex = index;
+    resource.meshes = [rocks];
+    resource.meshOffsets = [.34];
+    setInstanceTransform(rocks, index, { ...resource, y: resource.y + .34 }, resource.visible);
+    rocks.setColorAt(index, new THREE.Color(resource.isGold ? 0xc79b32 : (index % 2 ? 0x77746f : 0x918c84)));
+  });
+  rocks.instanceColor.needsUpdate = true;
+  sceneCtx.groups.decor.add(rocks);
 }
 
-async function spawnDecorModel(sceneCtx, state, x, z, key) {
-  if (!key) return;
-  const cfg = DECOR_MODELS[key];
-  if (!cfg) return;
-  try {
-    const root = 'decor';
-    const model = await loadDecorModel(cfg.file, root);
-    if (!model) return;
-
-    const h = sampleTerrainHeight(state, x, z);
-    const y = h + (cfg.y || 0.0);
-    const rand = Math.random();
-
-    model.scale.setScalar((cfg.scale || 0.25) * (0.92 + rand * 0.16));
-    model.position.set(x, y, z);
-    model.rotation.y = rand * Math.PI * 2;
-    model.traverse((obj) => {
-      if (obj.isMesh || obj.isSkinnedMesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
-      }
-    });
-
-    // Convert generic decor to actual gameplay resource nodes
-    if (['tree', 'oak', 'pine', 'pineAlt', 'pineRound'].includes(key)) {
-        state.trees.push({ x, y, z, hp: 50, maxHp: 50, mesh: model, id: `tree-${Math.random()}` });
-    } else if (['rocks', 'goldRock'].includes(key)) {
-        state.rocks.push({ x, y, z, hp: 100, maxHp: 100, isGold: key === 'goldRock', mesh: model, id: `rock-${Math.random()}` });
-    } else {
-        sceneCtx.groups.decor.add(model);
-    }
-  } catch (err) {
-    console.warn('Decor load failed', key, err);
-  }
+function validResourcePosition(state, x, z) {
+  if (Math.hypot(x, z) < 8) return false;
+  if (state.buildings.some((building) => Math.hypot(building.pos.x - x, building.pos.z - z) < (building.blockRadius || 1) + 1.2)) return false;
+  return !state.enemyCamps.some((camp) => Math.hypot(camp.pos.x - x, camp.pos.z - z) < 2.4);
 }
 
 export async function populateDecorModels(sceneCtx, state) {
-  const tasks = [];
-  const R = GAME_CONFIG.mapRadius * GAME_CONFIG.hexSize * 2.0;
+  const snapshots = resourceSnapshot(state);
+  const treeCandidates = [];
+  const rockCandidates = [];
+  const limit = sceneCtx.quality?.decorLimit || 110;
+  const radius = GAME_CONFIG.worldRadius - 3;
+  const seedSalt = state.worldSeed * .00013;
 
-  // Grid sampling for continuous decor placement
-  for (let x = -R; x <= R; x += 3.5) {
-      for (let z = -R; z <= R; z += 3.5) {
-          if (Math.hypot(x, z) > R * 0.95) continue;
-
-          const terrain = sampleTerrain(state, x, z);
-          if (terrain.type === 'water' || terrain.type === 'river') continue;
-
-          const choices = decorChoices(terrain.type, terrain.noise);
-          choices.forEach((c, idx) => {
-              const density = Math.abs(Math.sin(x * 17.7 + z * 9.3 + idx));
-              if (density < (1 - GAME_CONFIG.decorModelDensity)) return;
-
-              const offsetX = (Math.random() - 0.5) * 2.0;
-              const offsetZ = (Math.random() - 0.5) * 2.0;
-              tasks.push(spawnDecorModel(sceneCtx, state, x + offsetX, z + offsetZ, c));
-          });
+  for (let x = -radius; x <= radius; x += 3.4) {
+    for (let z = -radius; z <= radius; z += 3.4) {
+      if (Math.hypot(x, z) > radius) continue;
+      const jitterX = (coordinateRandom(x, z, seedSalt + 1) - .5) * 2.15;
+      const jitterZ = (coordinateRandom(x, z, seedSalt + 2) - .5) * 2.15;
+      const px = x + jitterX;
+      const pz = z + jitterZ;
+      if (!validResourcePosition(state, px, pz)) continue;
+      const terrain = sampleTerrain(state, px, pz);
+      const roll = coordinateRandom(x, z, seedSalt + 3);
+      const treeChance = terrain.type === 'forest' ? .78 : terrain.type === 'grass' ? .11 : terrain.type === 'fertile' ? .07 : .015;
+      const rockChance = terrain.type === 'rock' ? .72 : terrain.type === 'hill' ? .34 : .012;
+      if (roll < treeChance) {
+        treeCandidates.push({
+          kind: 'tree', x: px, y: terrain.height, z: pz,
+          rotation: coordinateRandom(x, z, seedSalt + 5) * Math.PI * 2,
+          scale: .72 + coordinateRandom(x, z, seedSalt + 6) * .35,
+          rank: coordinateRandom(x, z, seedSalt + 30),
+        });
+      } else if (roll > 1 - rockChance) {
+        const isGold = coordinateRandom(x, z, seedSalt + 7) > .84;
+        rockCandidates.push({
+          kind: 'rock', x: px, y: terrain.height, z: pz, isGold,
+          rotation: coordinateRandom(x, z, seedSalt + 8) * Math.PI * 2,
+          scale: .72 + coordinateRandom(x, z, seedSalt + 9) * .5,
+          rank: coordinateRandom(x, z, seedSalt + 31),
+        });
       }
+    }
   }
 
-  for (let i = 0; i < tasks.length; i += 8) { await Promise.allSettled(tasks.slice(i, i + 8)); }
+  treeCandidates.sort((a, b) => a.rank - b.rank);
+  rockCandidates.sort((a, b) => a.rank - b.rank);
+  const rockLimit = Math.min(rockCandidates.length, Math.max(18, Math.round(limit * .28)));
+  const treeLimit = Math.min(treeCandidates.length, limit - rockLimit);
+  const selectedTrees = treeCandidates.slice(0, treeLimit);
+  const selectedRocks = rockCandidates.slice(0, Math.min(rockLimit + Math.max(0, limit - treeLimit - rockLimit), rockCandidates.length));
+  for (const building of state.buildings) {
+    const selected = building.type === 'lumber' ? selectedTrees : building.type === 'mine' ? selectedRocks : null;
+    const candidates = building.type === 'lumber' ? treeCandidates : building.type === 'mine' ? rockCandidates : null;
+    if (!selected || !candidates || selected.some((candidate) => Math.hypot(candidate.x - building.pos.x, candidate.z - building.pos.z) <= 12)) continue;
+    const nearest = candidates.reduce((best, candidate) => {
+      const distance = Math.hypot(candidate.x - building.pos.x, candidate.z - building.pos.z);
+      return !best || distance < best.distance ? { candidate, distance } : best;
+    }, null)?.candidate;
+    if (nearest && !selected.includes(nearest)) selected[Math.max(0, selected.length - 1)] = nearest;
+  }
+  const trees = selectedTrees.map((candidate, index) => {
+    const id = `tree-${index}`;
+    const saved = snapshots.get(id);
+    return { ...candidate, id, hp: saved?.hp ?? 36, maxHp: 36, depletedUntil: saved?.depletedUntil ?? 0, visible: (saved?.hp ?? 36) > 0 };
+  });
+  const rocks = selectedRocks.map((candidate, index) => {
+    const id = `rock-${index}`;
+    const saved = snapshots.get(id);
+    return { ...candidate, id, hp: saved?.hp ?? 72, maxHp: 72, depletedUntil: saved?.depletedUntil ?? 0, visible: (saved?.hp ?? 72) > 0 };
+  });
 
-  // Add tree and rock meshes to the scene after populating lists
-  for (const tree of state.trees) sceneCtx.groups.decor.add(tree.mesh);
-  for (const rock of state.rocks) sceneCtx.groups.decor.add(rock.mesh);
+  state.trees = trees;
+  state.rocks = rocks;
+  addTreeInstances(sceneCtx, trees);
+  addRockInstances(sceneCtx, rocks);
+  state.resourceSnapshot = null;
+}
+
+export function updateResourceRegrowth(state) {
+  for (const resource of [...state.trees, ...state.rocks]) {
+    if (resource.hp > 0 || !resource.depletedUntil || state.worldTime < resource.depletedUntil) continue;
+    resource.hp = resource.maxHp;
+    resource.depletedUntil = 0;
+    setResourceVisible(resource, true);
+  }
 }

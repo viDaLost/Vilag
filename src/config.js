@@ -1,21 +1,27 @@
 export const GAME_CONFIG = {
-  saveKey: 'empire-east-3d-rts-save-v30',
+  saveKey: 'empire-of-the-river-save-v4',
+  saveVersion: 4,
+  worldRadius: 54,
   mapRadius: 14,
   hexSize: 1.72,
-  gridSize: 2.0,
+  gridSize: 1.8,
   axialScaleX: 0.985,
   axialScaleZ: 0.98,
   simBaseSpeed: 1,
   dayDuration: 320,
-  seasonDuration: 960,
-  autosaveEvery: 12,
-  workerSpawnEvery: 38,
-  enemyWaveEvery: 220,
-  enemyCampCount: 5,
-  decorModelDensity: 0.62,
-  maxPopulationSoft: 60,
+  seasonDuration: 210,
+  autosaveEvery: 20,
+  workerSpawnEvery: 52,
+  enemyWaveEvery: 145,
+  enemyCampCount: 4,
+  decorModelDensity: 0.54,
+  maxPopulationSoft: 72,
   doubleTapMs: 340,
   decorPerTileSoftCap: 5,
+  resourceRegrowTime: 210,
+  logicTick: 0.05,
+  hudRefresh: 0.2,
+  minimapRefresh: 0.5,
   terrain: {
     waterLevel: -0.72,
     riverBand: 0.055,
@@ -63,10 +69,11 @@ export const TERRAIN_TYPES = {
 export const BUILDINGS = {
   capital: {
     name: 'Столица', icon: '🏰',
+    desc: 'Сердце державы: расширяет владения, обучает рабочих и поддерживает население.',
     model: 'castle-fortress.glb', category: 'core',
     maxLevel: 5,
     baseBuildTime: 0,
-    yields: { prestige: .08, knowledge: .03, populationCap: 12 },
+    yields: { gold: .16, prestige: .035, knowledge: .018, populationCap: 14 },
     train: ['worker'],
     health: 380,
     territory: 3.4,
@@ -74,9 +81,10 @@ export const BUILDINGS = {
   },
   farm: {
     name: 'Ферма', icon: '🌾', model: 'farm.glb', category: 'economy',
+    desc: 'Производит пищу; плодородная земля и берег усиливают урожай.',
     cost: { gold: 25, wood: 10 },
     baseBuildTime: 10,
-    yields: { food: .95 },
+    yields: { food: .48 },
     maxLevel: 3,
     health: 110,
     terrain: [],
@@ -84,9 +92,10 @@ export const BUILDINGS = {
   },
   lumber: {
     name: 'Лесопилка', icon: '🪓', model: 'storage-shed.glb', category: 'economy',
+    desc: 'Направляет рабочих к ближайшим деревьям и принимает древесину.',
     cost: { gold: 24, food: 6 },
     baseBuildTime: 11,
-    yields: { wood: .82 },
+    yields: { wood: .18 },
     maxLevel: 3,
     health: 120,
     terrain: [],
@@ -94,9 +103,10 @@ export const BUILDINGS = {
   },
   mine: {
     name: 'Шахта', icon: '⛏️', model: 'mine.glb', category: 'economy',
+    desc: 'Добывает камень и редкое золото на холмах и скалах.',
     cost: { gold: 32, wood: 12 },
     baseBuildTime: 14,
-    yields: { stone: .72, gold: .12 },
+    yields: { stone: .16, gold: .035 },
     maxLevel: 3,
     health: 132,
     terrain: [],
@@ -104,9 +114,10 @@ export const BUILDINGS = {
   },
   market: {
     name: 'Рынок', icon: '🛍️', model: 'market-stalls.glb', category: 'economy',
+    desc: 'Получает золото от дорог, соседних поселений и караванов.',
     cost: { gold: 48, wood: 14 },
     baseBuildTime: 13,
-    yields: { gold: .8 },
+    yields: { gold: .42 },
     maxLevel: 3,
     health: 120,
     terrain: [],
@@ -114,9 +125,10 @@ export const BUILDINGS = {
   },
   granary: {
     name: 'Амбар', icon: '🏺', model: 'storage-house.glb', category: 'economy',
+    desc: 'Увеличивает вместимость запасов и поддерживает порядок.',
     cost: { gold: 35, wood: 16 },
     baseBuildTime: 12,
-    yields: { food: .28, stability: .02 },
+    yields: { food: .12, stability: .018, populationCap: 4 },
     maxLevel: 3,
     health: 128,
     terrain: [],
@@ -124,6 +136,7 @@ export const BUILDINGS = {
   },
   temple: {
     name: 'Храм', icon: '🏛️', model: 'temple.glb', category: 'culture',
+    desc: 'Укрепляет порядок, престиж и медленно лечит защитников рядом.',
     cost: { gold: 90, stone: 38 },
     baseBuildTime: 18,
     yields: { prestige: .22, stability: .06, knowledge: .05 },
@@ -134,6 +147,7 @@ export const BUILDINGS = {
   },
   barracks: {
     name: 'Казармы', icon: '⚔️', model: 'barracks.glb', category: 'military',
+    desc: 'Обучает пехоту и служит укреплённой точкой сбора.',
     cost: { gold: 65, stone: 18 },
     baseBuildTime: 18,
     yields: { army: .05 },
@@ -144,6 +158,7 @@ export const BUILDINGS = {
   },
   wall: {
     name: 'Стена', icon: '🧱', model: 'stone-wall.glb', category: 'military',
+    desc: 'Задерживает врагов и прикрывает важные здания.',
     cost: { stone: 24, wood: 10 },
     baseBuildTime: 8,
     yields: { defense: .3 },
@@ -153,6 +168,7 @@ export const BUILDINGS = {
   },
   tower: {
     name: 'Башня', icon: '🏹', model: 'fortress.glb', category: 'military',
+    desc: 'Автоматически обстреливает врагов и расширяет обзор.',
     cost: { gold: 60, stone: 22, wood: 10 },
     baseBuildTime: 17,
     yields: { defense: .7 },
@@ -163,6 +179,7 @@ export const BUILDINGS = {
   },
   academy: {
     name: 'Академия', icon: '📚', model: 'academy.glb', category: 'culture',
+    desc: 'Ускоряет исследования и открывает путь к Золотому веку.',
     cost: { gold: 100, wood: 16, stone: 26 },
     baseBuildTime: 22,
     yields: { knowledge: .18, prestige: .04 },
@@ -174,6 +191,7 @@ export const BUILDINGS = {
   },
   harbor: {
     name: 'Караванный порт', icon: '🐪', model: 'port.glb', category: 'economy',
+    desc: 'Торговый узел у реки; особенно силён при соединении дорогой с рынком.',
     cost: { gold: 88, wood: 20, stone: 14 },
     baseBuildTime: 18,
     yields: { gold: 1.0, prestige: .05 },
@@ -185,6 +203,7 @@ export const BUILDINGS = {
   },
   wonder: {
     name: 'Чудо света', icon: '✨', model: 'wonder.glb', category: 'culture',
+    desc: 'Мирный финал кампании и главный символ державы.',
     cost: { gold: 210, wood: 40, stone: 120 },
     baseBuildTime: 48,
     yields: { prestige: .4, stability: .14, knowledge: .14 },
@@ -199,36 +218,36 @@ export const BUILDINGS = {
 export const UNITS = {
   worker: {
     name: 'Рабочий', icon: '🧑‍🌾', trainTime: 8,
-    cost: { food: 4 }, speed: 2.65, hp: 34, attack: 0, range: 0, role: 'worker'
+    cost: { food: 8 }, speed: 2.65, hp: 38, attack: 1, range: 0.7, armor: 0, sight: 7, role: 'worker'
   },
   militia: {
     name: 'Ополченец', icon: '🗡️', trainTime: 9,
-    cost: { gold: 16, food: 5 }, speed: 2.25, hp: 54, attack: 5.5, range: 0.9, role: 'melee'
+    cost: { gold: 16, food: 7 }, speed: 2.25, hp: 58, attack: 5.5, range: 0.9, armor: 1, sight: 9, role: 'melee'
   },
   archer: {
     name: 'Лучник', icon: '🏹', trainTime: 11,
-    cost: { gold: 20, food: 6 }, speed: 2.05, hp: 42, attack: 6, range: 4.8, minEra: 1, role: 'ranged'
+    cost: { gold: 22, food: 8 }, speed: 2.05, hp: 44, attack: 6, range: 4.8, armor: 0, sight: 11, minEra: 1, role: 'ranged'
   },
   swordsman: {
     name: 'Мечник', icon: '⚔️', trainTime: 12,
-    cost: { gold: 24, food: 8 }, speed: 2.15, hp: 78, attack: 8, range: 0.95,
+    cost: { gold: 28, food: 10 }, speed: 2.15, hp: 82, attack: 8, range: 0.95, armor: 2, sight: 9,
     minEra: 1, role: 'melee'
   },
   raider: {
     name: 'Налётчик', icon: '🔥', trainTime: 0,
-    cost: {}, speed: 2.0, hp: 42, attack: 6, range: .8, hostile: true, role: 'melee', faction: 'clans'
+    cost: {}, speed: 2.0, hp: 46, attack: 6, range: .8, armor: 0, sight: 9, hostile: true, role: 'melee', faction: 'clans'
   },
   raiderArcher: {
     name: 'Налётчик-лучник', icon: '🏹', trainTime: 0,
-    cost: {}, speed: 1.95, hp: 36, attack: 5, range: 4.4, hostile: true, role: 'ranged', faction: 'clans'
+    cost: {}, speed: 1.95, hp: 38, attack: 5, range: 4.4, armor: 0, sight: 11, hostile: true, role: 'ranged', faction: 'clans'
   },
   brute: {
     name: 'Крушитель', icon: '🪓', trainTime: 0,
-    cost: {}, speed: 1.55, hp: 96, attack: 10, range: 1.0, hostile: true, role: 'siege', faction: 'iron'
+    cost: {}, speed: 1.55, hp: 104, attack: 10, range: 1.0, armor: 3, sight: 8, hostile: true, role: 'siege', faction: 'iron'
   },
   wolfRider: {
     name: 'Волк-налётчик', icon: '🐺', trainTime: 0,
-    cost: {}, speed: 2.7, hp: 52, attack: 7, range: .9, hostile: true, role: 'melee', faction: 'beasts'
+    cost: {}, speed: 2.7, hp: 54, attack: 7, range: .9, armor: 1, sight: 10, hostile: true, role: 'melee', faction: 'beasts'
   }
 };
 
@@ -284,9 +303,25 @@ export const TECHS = [
   { id: 'dynasty', name: 'Династический кодекс', cost: 34, minEra: 2, desc: 'Порядок растёт, кризисы слабее.' }
 ];
 
+export const CAMPAIGN_CHAPTERS = [
+  { name: 'I. Долина', desc: 'Накорми поселенцев и запусти три главных промысла.' },
+  { name: 'II. Рубеж', desc: 'Создай оборону, постоянное войско и отбей первый лагерь.' },
+  { name: 'III. Золотой путь', desc: 'Соедини знания, торговлю и престиж зрелой державы.' },
+  { name: 'IV. Наследие', desc: 'Выбери финал: возведи Чудо или уничтожь все вражеские лагеря.' },
+];
+
 export const OBJECTIVES = [
-  { id: 'all_buildings', title: 'Построить все здания', target: 12, metric: 'uniqueBuildings', reward: { prestige: 20, stability: 20 } },
-  { id: 'wonder', title: 'Создать чудо и достичь максимума', target: 1, metric: 'wonderBuilt', reward: { prestige: 18, stability: 14 } }
+  { id: 'first_economy', chapter: 0, title: 'Запустить ферму, лесопилку и шахту', target: 3, metric: 'economyReady', reward: { gold: 30, stability: 5 } },
+  { id: 'food_reserve', chapter: 0, title: 'Накопить 160 еды', target: 160, metric: 'food', reward: { prestige: 8 } },
+  { id: 'settlers', chapter: 0, title: 'Увеличить население до 7', target: 7, metric: 'population', reward: { wood: 25 } },
+  { id: 'fortify', chapter: 1, title: 'Построить две оборонные постройки', target: 2, metric: 'defensiveBuildings', reward: { stone: 35 } },
+  { id: 'standing_army', chapter: 1, title: 'Собрать отряд из 4 воинов', target: 4, metric: 'armyUnits', reward: { gold: 45, stability: 6 } },
+  { id: 'first_camp', chapter: 1, title: 'Разрушить один вражеский лагерь', target: 1, metric: 'campsDestroyed', reward: { knowledge: 22, prestige: 12 } },
+  { id: 'wisdom', chapter: 2, title: 'Изучить три технологии', target: 3, metric: 'learnedTechs', reward: { gold: 60 } },
+  { id: 'golden_route', chapter: 2, title: 'Построить рынок и караванный порт', target: 2, metric: 'tradeBuildings', reward: { prestige: 18, stability: 8 } },
+  { id: 'renown', chapter: 2, title: 'Достичь 60 престижа', target: 60, metric: 'prestige', reward: { knowledge: 28 } },
+  { id: 'wonder', chapter: 3, branch: 'wonder', title: 'Мирный путь: возвести Чудо света', target: 1, metric: 'wonderBuilt', reward: { prestige: 40, stability: 20 } },
+  { id: 'conquest', chapter: 3, branch: 'conquest', title: 'Военный путь: уничтожить все лагеря', target: 0, metric: 'enemyCampsRemaining', comparator: 'lte', reward: { prestige: 40, stability: 12 } },
 ];
 
 export const WEATHER_TYPES = {

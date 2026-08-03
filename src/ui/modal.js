@@ -5,6 +5,9 @@ export function setupModal() {
   $('#modal-overlay').addEventListener('pointerdown', (e) => {
     if (e.target === $('#modal-overlay')) closeModal();
   });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeModal();
+  });
 }
 
 export function openModal(title, subtitle, html, actions = []) {
@@ -16,6 +19,7 @@ export function openModal(title, subtitle, html, actions = []) {
   actions.forEach((a, i) => {
     document.querySelector(`[data-modal-action="${i}"]`)?.addEventListener('click', () => a.onClick?.());
   });
+  document.querySelector('[data-modal-action="0"]')?.focus();
 }
 
 export function closeModal() {

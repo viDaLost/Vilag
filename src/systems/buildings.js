@@ -3,9 +3,15 @@ import { sampleTerrain } from './world.js';
 import * as THREE from 'three';
 import { BUILDINGS } from '../config.js';
 import { loadBuildingModel, makeFallbackMesh, loadDecorModel, groundScene } from '../core/assets.js';
+import { tradeNetworkBonus } from './roads.js';
 
 
 let buildingId = 1;
+
+function claimId(id) {
+  const numeric = Number(String(id || '').replace(/\D/g, ''));
+  if (Number.isFinite(numeric)) buildingId = Math.max(buildingId, numeric + 1);
+}
 
 function selectionRing() {
   const ring = new THREE.Mesh(
@@ -67,10 +73,24 @@ export function canPlaceBuilding(state, type, x, z) {
   if (type === 'mine' && terrain.type !== 'hill' && terrain.type !== 'rock') return false;
   if (type === 'harbor' && terrain.type !== 'river') return false;
 
+  const footprint = type === 'capital' ? 2.1 : type === 'wonder' ? 1.45 : 1.02;
+  const heights = [
+    sampleTerrain(state, x + footprint, z).height,
+    sampleTerrain(state, x - footprint, z).height,
+    sampleTerrain(state, x, z + footprint).height,
+    sampleTerrain(state, x, z - footprint).height,
+  ];
+  const slope = Math.max(...heights) - Math.min(...heights);
+  if (slope > (['mine', 'tower', 'wall'].includes(type) ? 1.15 : .68)) return false;
+
   // Check collision with other buildings
   const r = 1.0 + (type === 'capital' ? 1.2 : 0);
   for (const b of state.buildings) {
       if (Math.hypot(b.pos.x - x, b.pos.z - z) < r + b.blockRadius) return false;
+  }
+  for (const job of state.construction) {
+    if (job.mode !== 'new') continue;
+    if (Math.hypot(job.x - x, job.z - z) < r + 1.05) return false;
   }
 
   return true;
@@ -117,7 +137,7 @@ export function startUpgrade(state, building) {
   payCost(state.resources, cost);
   const job = {
     id: `c-${buildingId++}`, type: building.type, buildingId: building.id,
-    tileId: building.tileId, progress: 0, buildTime: getUpgradeTime(building.type, nextLevel),
+    tileId: building.tileId, x: building.pos.x, z: building.pos.z, progress: 0, buildTime: getUpgradeTime(building.type, nextLevel),
     mode: 'upgrade', targetLevel: nextLevel,
   };
   state.construction.push(job);
@@ -153,6 +173,7 @@ export function destroyBuilding(sceneCtx, state, building) {
     }
   });
   state.buildings = state.buildings.filter((b) => b.id !== building.id);
+  state.construction = state.construction.filter((job) => job.buildingId !== building.id);
   const refund = Math.round((BUILDINGS[building.type].cost?.wood || 0) * .25);
   state.resources.wood += refund;
   state.resources.stone += Math.round((BUILDINGS[building.type].cost?.stone || 0) * .2);
@@ -239,7 +260,7 @@ function updateBuildingBadge(building) {
   building.levelBadge = badge;
 }
 
-export async function finishConstruction(sceneCtx, state, job) {
+export function finishConstruction(sceneCtx, state, job) {
   if (job.mode === 'upgrade') {
     const building = getBuildingById(state, job.buildingId);
     if (!building) return null;
@@ -249,7 +270,10 @@ export async function finishConstruction(sceneCtx, state, job) {
     building.hp = building.maxHp;
     building.upgrading = false;
     const model = building.modelRoot || building.mesh.children[0];
-    if (model) model.scale.setScalar(scaleForBuilding(building.type, building.level));
+    if (model) {
+      model.scale.setScalar(scaleForBuilding(building.type, building.level));
+      groundScene(model, buildingBaseLift(building.type));
+    }
     if (building.glow) building.glow.intensity = .9 + building.level * .1;
     if (cfg.territory) state.territoryRadius += cfg.territory * 0.32;
     updateBuildingBadge(building);
@@ -262,18 +286,31 @@ export async function finishConstruction(sceneCtx, state, job) {
 
   const anchorY = sampleTerrainHeight(state, job.x, job.z);
 
+  const restoredLevel = Math.max(1, job.savedLevel || 1);
+  const restoredMaxHp = job.savedMaxHp || Math.round(cfg.health * (1 + (restoredLevel - 1) * .25));
   const entity = {
-    id: `b-${buildingId++}`, type: job.type, tileId: null, level: 1, hp: cfg.health, maxHp: cfg.health,
+    id: job.savedId || `b-${buildingId++}`, type: job.type, tileId: null, level: restoredLevel, hp: job.savedHp ?? restoredMaxHp, maxHp: restoredMaxHp,
     cooldown: 0, trainQueue: [], mesh: new THREE.Group(), selection: null, glow: null, hitFlash: 0,
     upgrading: false, extraMeshes: [], levelBadge: null, rallyTileId: null, workerDemand: 0, activeWorkers: 0,
-    workerRatio: 1, blockRadius: 0.9 + (job.type === 'capital' ? 1.2 : 0),
+    workerRatio: 1, blockRadius: 0.9 + (job.type === 'capital' ? 1.2 : job.type === 'wonder' ? .45 : 0),
     pos: new THREE.Vector3(job.x, anchorY, job.z),
-    surfaceY: anchorY,
-    rallyPos: null
+    surfaceY: anchorY, priority: job.savedPriority ?? 1, roadConnected: false,
+    rallyPos: job.savedRallyPos ? new THREE.Vector3(job.savedRallyPos.x, sampleTerrainHeight(state, job.savedRallyPos.x, job.savedRallyPos.z), job.savedRallyPos.z) : null,
   };
+  claimId(entity.id);
+  entity.trainQueue = (job.savedTrainQueue || []).map((queued) => ({ ...queued }));
+
+  const foundation = new THREE.Mesh(
+    new THREE.CylinderGeometry(entity.blockRadius * .88, entity.blockRadius, .16, 16),
+    new THREE.MeshStandardMaterial({ color: job.type === 'capital' ? 0xb9985e : 0x7a684f, roughness: 1 }),
+  );
+  foundation.position.y = .035;
+  foundation.receiveShadow = true;
+  entity.mesh.add(foundation);
+  entity.foundation = foundation;
 
   const placeholder = makeFallbackMesh(job.type === 'capital' ? 0xc9a45b : 0xa8844d);
-  placeholder.scale.setScalar(scaleForBuilding(job.type, 1));
+  placeholder.scale.setScalar(scaleForBuilding(job.type, entity.level));
   placeholder.position.y = buildingBaseLift(job.type);
   entity.mesh.add(placeholder);
   entity.modelRoot = placeholder;
@@ -299,7 +336,7 @@ export async function finishConstruction(sceneCtx, state, job) {
   state.buildings.push(entity);
 
 
-  if (cfg.territory) state.territoryRadius += cfg.territory;
+  if (cfg.territory && !job.restoring) state.territoryRadius += cfg.territory;
   if (state.techs.has('stonework') && ['wall', 'tower', 'temple'].includes(job.type)) {
     entity.maxHp = Math.round(entity.maxHp * 1.18); entity.hp = entity.maxHp;
   }
@@ -351,14 +388,12 @@ export function computeBuildingYield(state, building) {
     if (terrain.type === 'rock') out.stone += .18;
     if (terrain.type === 'hill') out.gold += .06;
   }
-  if (building.type === 'market') out.gold += state.buildings.length * .01;
+  if (building.type === 'market') out.gold = (out.gold + state.buildings.length * .008) * tradeNetworkBonus(state);
   if (building.type === 'temple' && terrain.type === 'sacred') out.prestige += .12;
   if (building.type === 'academy' && state.techs.has('archives')) out.knowledge += .08;
+  if (building.type === 'harbor') out.gold *= tradeNetworkBonus(state);
   if (building.type === 'tower' && state.techs.has('discipline')) out.defense += .25;
   if (building.type === 'capital' && state.era > 0) { out.gold += .14 * state.era; out.populationCap += 2 * state.era; }
-
-  // Removed passive yields for economy buildings to incentivize active worker gathering
-  if (['farm', 'lumber', 'mine'].includes(building.type)) { delete out.wood; delete out.stone; }
 
   const workerStatus = getBuildingWorkerStatus(state, building);
   building.workerDemand = workerStatus.demand; building.activeWorkers = workerStatus.assigned; building.workerRatio = workerStatus.ratio;
@@ -383,4 +418,13 @@ export function getBuildingStatus(state, building) {
     cfg, canUpgrade, upgradeCost: getUpgradeCost(building.type, building.level + 1),
     upgradeTime: getUpgradeTime(building.type, building.level + 1), repairNeeded: building.hp < building.maxHp * .96,
   };
+}
+
+export function cycleBuildingPriority(building) {
+  building.priority = ((building.priority ?? 1) + 1) % 3;
+  return building.priority;
+}
+
+export function buildingPriorityLabel(building) {
+  return ['Низкий', 'Обычный', 'Высокий'][building.priority ?? 1];
 }

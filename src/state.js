@@ -2,13 +2,16 @@ import { OBJECTIVES } from './config.js';
 
 export function createInitialState() {
   return {
+    saveVersion: 4,
+    worldSeed: Math.floor(Math.random() * 2147483646) + 1,
+    quality: 'auto',
     timeScale: 1,
     paused: false,
-    dayTime: 0,
+    dayTime: 96,
     seasonTime: 0,
     worldTime: 0,
     autosaveTimer: 0,
-    enemyWaveTimer: 180,
+    enemyWaveTimer: 95,
     workerSpawnDelay: 34,
     workerSpawnTimer: 0,
     weather: 'clear',
@@ -18,11 +21,18 @@ export function createInitialState() {
     placementMode: null,
     dragging: false,
     lastTapTileId: null,
+    lastTapPos: null,
     lastTapAt: 0,
     lastQuickBuildType: 'farm',
     selectedUnits: [],
     buildPreviewTiles: [],
     gameEnded: false,
+    victory: null,
+    campaign: {
+      chapter: 0,
+      chapterStartedAt: 0,
+      announcedChapter: -1,
+    },
     resources: {
       gold: 140,
       food: 120,
@@ -36,11 +46,13 @@ export function createInitialState() {
       stability: 72,
       knowledge: 0,
       threat: 2,
-      roads: 0
+      roads: 0,
+      storageFood: 420,
+      storageMaterials: 320,
     },
     techs: new Set(),
     techProgress: null,
-    objectives: OBJECTIVES.map(o => ({ ...o, done: false })),
+    objectives: OBJECTIVES.map(o => ({ ...o, reward: { ...o.reward }, done: false })),
     worldConfig: null,
     trees: [],
     rocks: [],
@@ -59,6 +71,12 @@ export function createInitialState() {
       wonderBuilt: 0,
       armyUnits: 0,
       campsDestroyed: 0
-    }
+    },
+    aiState: {
+      decisionTimer: 1,
+      waveTimer: 78,
+      waveIndex: 0,
+      pressure: 0,
+    },
   };
 }
