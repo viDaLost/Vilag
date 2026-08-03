@@ -182,15 +182,17 @@ export function buildTerrain(sceneCtx, state) {
   }
   ensureTerrainMaterials();
 
-  const size = GAME_CONFIG.mapRadius * GAME_CONFIG.hexSize * 8.2;
-  const segments = 220;
+  const size = GAME_CONFIG.worldRadius * 2.18;
+  const segments = sceneCtx.quality?.terrainSegments || 128;
   let geo = new THREE.PlaneGeometry(size, size, segments, segments);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
+  const samples = new Array(pos.count);
 
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const terrain = sampleTerrain(state, x, z);
+    samples[i] = terrain;
     let h = terrain.height;
     if (terrain.type === 'water') h = Math.min(h, GAME_CONFIG.terrain.waterLevel - 0.22);
     pos.setY(i, h);
@@ -202,7 +204,7 @@ export function buildTerrain(sceneCtx, state) {
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
     const steepness = 1 - Math.abs(normals.getY(i));
-    const terrain = sampleTerrain(state, x, z);
+    const terrain = samples[i];
     const c = colorFor(terrain.type, y, x, z, steepness);
     colors.push(c.r, c.g, c.b);
   }
@@ -210,19 +212,15 @@ export function buildTerrain(sceneCtx, state) {
 
   terrainMesh = new THREE.Mesh(geo, terrainMaterial);
   terrainMesh.receiveShadow = true;
-  terrainMesh.castShadow = true;
+  terrainMesh.castShadow = false;
   terrainMesh.name = 'terrain-mesh';
   groups.tiles.add(terrainMesh);
 
-  const waterGeo = new THREE.PlaneGeometry(size, size, segments/2, segments/2);
+  const waterGeo = new THREE.CircleGeometry(size * .52, sceneCtx.quality?.name === 'mobile' ? 40 : 64);
   waterGeo.rotateX(-Math.PI / 2);
-  const wpos = waterGeo.attributes.position;
-
-  for (let i = 0; i < wpos.count; i++) {
-    wpos.setY(i, GAME_CONFIG.terrain.waterLevel + 0.018);
-  }
 
   waterMesh = new THREE.Mesh(waterGeo, waterMaterial);
+  waterMesh.position.y = GAME_CONFIG.terrain.waterLevel + .018;
   waterMesh.receiveShadow = true;
   waterMesh.name = 'water-surfaces';
   waterMesh.renderOrder = 2;

@@ -80,10 +80,16 @@ async function loadModelEntry(filename, root = 'buildings') {
   if (!filename) return null;
   const key = `${root}:${filename}`;
   if (cache.has(key)) return cache.get(key);
-  const entry = await loadFirst(getModelCandidates(filename, root));
-  prepareScene(entry.scene);
-  cache.set(key, entry);
-  return entry;
+  const pending = loadFirst(getModelCandidates(filename, root)).then((entry) => {
+    prepareScene(entry.scene);
+    cache.set(key, entry);
+    return entry;
+  }).catch((error) => {
+    cache.delete(key);
+    throw error;
+  });
+  cache.set(key, pending);
+  return pending;
 }
 
 

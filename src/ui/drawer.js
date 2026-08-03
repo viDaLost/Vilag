@@ -1,7 +1,7 @@
 import { BUILDINGS, TECHS, UNITS, TERRAIN_TYPES } from '../config.js';
 import { $, $$ } from './dom.js';
 import { beginResearch, canResearch } from '../systems/economy.js';
-import { canPlaceBuilding, computeBuildingYield, getBuildingStatus, getBuildingWorkerStatus } from '../systems/buildings.js';
+import { buildingPriorityLabel, canPlaceBuilding, computeBuildingYield, getBuildingStatus, getBuildingWorkerStatus } from '../systems/buildings.js';
 
 export function closeDrawer() {
   $('#context-drawer').classList.add('hidden');
@@ -32,10 +32,10 @@ export function openBuildMenu(state, onChoose) {
       return `<button class="card-btn" data-build-type="${key}" ${enabled ? '' : 'disabled'}>
         <strong>${cfg.icon} ${cfg.name}</strong>
         <small>${costText(cfg.cost)} • ${cfg.baseBuildTime}с</small>
-        <small>${categoryLabel(cfg.category)}</small>
+        <small>${cfg.desc || categoryLabel(cfg.category)}</small>
       </button>`;
     }).join('');
-  openDrawer('Строительство', 'Выбери тип и тапни по соте. На телефоне меню открывается как нижняя панель.', `<div class="card-grid">${cards}</div>`);
+  openDrawer('Строительство', 'Выберите постройку, затем место на карте. Красный макет означает неподходящую землю.', `<div class="card-grid">${cards}</div>`);
   $$('[data-build-type]').forEach((btn) => {
     btn.onclick = () => onChoose(btn.dataset.buildType);
   });
@@ -75,7 +75,7 @@ export function openTrainMenu(state, onTrain) {
   const cards = barracks.map((building) => {
     const available = (BUILDINGS[building.type].train || []).map((unitType) => {
       const unit = UNITS[unitType];
-      const disabled = state.era < (unit.minEra ?? 0);
+      const disabled = state.era < (unit.minEra ?? 0) || state.resources.population + state.buildings.reduce((sum, item) => sum + (item.trainQueue?.length || 0), 0) >= state.resources.populationCap;
       return `<button class="card-btn" data-train-building="${building.id}" data-unit-type="${unitType}" ${disabled ? 'disabled' : ''}>
         <strong>${unit.icon} ${unit.name}</strong>
         <small>${costText(unit.cost)} • ${unit.trainTime}с</small>
@@ -125,7 +125,12 @@ export function openBuildingMenu(state, building, tile, handlers) {
   }
   if ((BUILDINGS[building.type].train || []).length) {
     actions.push(`<button class="card-btn" data-building-action="train"><strong>⚔️ Обучать войска</strong><small>Открыть локальную очередь здания</small></button>`);
-    actions.push(`<button class="card-btn" data-building-action="rally"><strong>🛡️ Назначить точку сбора</strong><small>${building.rallyTileId ? 'Точка уже задана — можно сменить' : 'Войска будут охранять выбранную соту'}</small></button>`);
+    actions.push(`<button class="card-btn" data-building-action="rally"><strong>🛡️ Назначить точку сбора</strong><small>${building.rallyPos ? 'Точка уже задана — можно сменить' : 'Войска будут охранять выбранный район'}</small></button>`);
+  }
+  if (worker.demand) {
+    actions.push(`<button class="card-btn" data-building-action="assign"><strong>🧑‍🌾 Назначить рабочего</strong><small>Свободных: ${state.resources.workers || 0}</small></button>`);
+    actions.push(`<button class="card-btn" data-building-action="release"><strong>↩ Освободить рабочего</strong><small>Сейчас занято: ${worker.assigned} / ${worker.demand}</small></button>`);
+    actions.push(`<button class="card-btn" data-building-action="priority"><strong>⚑ Приоритет: ${buildingPriorityLabel(building)}</strong><small>Высокий приоритет получает свободных рабочих первым</small></button>`);
   }
   if (status.repairNeeded) {
     actions.push(`<button class="card-btn" data-building-action="repair"><strong>🛠️ Починить</strong><small>Вернуть часть прочности</small></button>`);
@@ -138,8 +143,8 @@ export function openBuildingMenu(state, building, tile, handlers) {
     `${status.cfg.icon} ${status.cfg.name} • ур. ${building.level}`,
     `${TERRAIN_TYPES[tile.type || 'grass']?.name || 'Равнина'} • HP ${Math.round(building.hp)} / ${Math.round(building.maxHp)}`,
     `
-      <div class="list-item"><strong>Доход / эффект в секунду</strong><br>${Object.entries(yields).map(([k, v]) => `${k}: ${Math.round(v * 100) / 100}`).join(' • ') || 'Нет прямого дохода'}</div>
-      <div class="list-item"><strong>Рабочие</strong><br>${worker.demand ? `${worker.assigned} / ${worker.demand} занято` : 'Не требуются'}${building.rallyTileId ? `<br>Точка сбора назначена` : ''}</div>
+      <div class="list-item"><strong>${status.cfg.desc || ''}</strong><br><span class="drawer-subtitle">Эффект в секунду: ${Object.entries(yields).map(([k, v]) => `${resourceLabel(k)} ${Math.round(v * 100) / 100}`).join(' • ') || 'нет прямого дохода'}</span></div>
+      <div class="list-item"><strong>Рабочие</strong><br>${worker.demand ? `${worker.assigned} / ${worker.demand} занято • приоритет: ${buildingPriorityLabel(building)}` : 'Не требуются'}${building.rallyPos ? `<br>Точка сбора назначена` : ''}</div>
       ${queue}
       <div class="card-grid">${actions.join('')}</div>
     `
@@ -150,7 +155,11 @@ export function openBuildingMenu(state, building, tile, handlers) {
 }
 
 function costText(cost = {}) {
-  return Object.entries(cost).map(([k, v]) => `${v} ${k}`).join(', ');
+  return Object.entries(cost).map(([k, v]) => `${resourceLabel(k)} ${v}`).join(' • ');
+}
+
+function resourceLabel(key) {
+  return ({ gold: '💰', food: '🌾', wood: '🪵', stone: '🪨', prestige: '👑', stability: '🕊️', knowledge: '🔬', populationCap: '👥', defense: '🛡️', army: '⚔️' })[key] || key;
 }
 
 function categoryLabel(key) {

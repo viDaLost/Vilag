@@ -4,23 +4,23 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-function makeCloudCluster() {
+function makeCloudCluster(geometry, material) {
   const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xfaf3e1, transparent: true, opacity: .28, roughness: 1 });
-  for (let i = 0; i < 4; i++) {
-    const puff = new THREE.Mesh(new THREE.SphereGeometry(4 + Math.random() * 3, 10, 10), mat);
-    puff.scale.y = .45 + Math.random() * .15;
+  for (let i = 0; i < 3; i++) {
+    const puff = new THREE.Mesh(geometry, material);
+    const size = 3.2 + Math.random() * 2.2;
+    puff.scale.set(size, size * (.42 + Math.random() * .12), size);
     puff.position.set((Math.random() - .5) * 18, Math.random() * 1.8, (Math.random() - .5) * 10);
     group.add(puff);
   }
   return group;
 }
 
-export function createScene(canvas) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, innerWidth < 900 ? 1.5 : 2));
+export function createScene(canvas, quality) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.name !== 'mobile', alpha: false, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, quality.pixelRatio));
   renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = quality.shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -48,9 +48,12 @@ export function createScene(canvas) {
   if ('zoomToCursor' in controls) controls.zoomToCursor = true;
   controls.target.set(0, 1.4, 0);
 
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), innerWidth < 800 ? .11 : .09, .35, .96));
+  let composer = null;
+  if (quality.bloom) {
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .075, .3, .97));
+  }
 
   const hemi = new THREE.HemisphereLight(0xf8f7f2, 0xbba98a, 2.0);
   scene.add(hemi);
@@ -62,7 +65,7 @@ export function createScene(canvas) {
 
   const sun = new THREE.DirectionalLight(0xfff2d6, 2.2);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
   sun.shadow.camera.left = -70;
   sun.shadow.camera.right = 70;
   sun.shadow.camera.top = 70;
@@ -86,26 +89,27 @@ export function createScene(canvas) {
   );
   scene.add(sky);
 
-  const stars = new THREE.Group();
-  const starGeo = new THREE.SphereGeometry(.14, 6, 6);
-  const starMat = new THREE.MeshBasicMaterial({ color: 0xfff6db });
-  for (let i = 0; i < 160; i++) {
-    const star = new THREE.Mesh(starGeo, starMat);
+  const starPositions = [];
+  for (let i = 0; i < quality.starCount; i++) {
     const radius = 120 + Math.random() * 100;
     const angle = Math.random() * Math.PI * 2;
     const y = 15 + Math.random() * 90;
-    star.position.set(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
-    stars.add(star);
+    starPositions.push(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
   }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xfff6db, size: .34, sizeAttenuation: true }));
   scene.add(stars);
 
   const world = new THREE.Group();
   scene.add(world);
 
   const cloudLayer = new THREE.Group();
-  for (let i = 0; i < 10; i++) {
-    const cloud = makeCloudCluster();
-    const angle = (i / 10) * Math.PI * 2;
+  const cloudGeometry = new THREE.SphereGeometry(1, 7, 6);
+  const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xfaf3e1, transparent: true, opacity: .24, roughness: 1, depthWrite: false });
+  for (let i = 0; i < quality.cloudCount; i++) {
+    const cloud = makeCloudCluster(cloudGeometry, cloudMaterial);
+    const angle = (i / quality.cloudCount) * Math.PI * 2;
     const radius = 42 + Math.random() * 34;
     cloud.position.set(Math.cos(angle) * radius, 18 + Math.random() * 6, Math.sin(angle) * radius);
     cloud.userData.drift = .2 + Math.random() * .18;
@@ -139,10 +143,21 @@ export function createScene(canvas) {
   function resize() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, innerWidth < 900 ? 1.5 : 2));
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, quality.pixelRatio));
     renderer.setSize(innerWidth, innerHeight);
-    composer.setSize(innerWidth, innerHeight);
+    composer?.setSize(innerWidth, innerHeight);
   }
 
-  return { renderer, scene, camera, controls, composer, hemi, ambient, fill, sun, sky, stars, cloudLayer, world, worldBase, groups, effectBursts: [], resize };
+  function setPixelRatio(ratio) {
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(innerWidth, innerHeight, false);
+    composer?.setPixelRatio?.(ratio);
+    composer?.setSize(innerWidth, innerHeight);
+  }
+
+  function render() {
+    if (composer) composer.render(); else renderer.render(scene, camera);
+  }
+
+  return { renderer, scene, camera, controls, composer, hemi, ambient, fill, sun, sky, stars, cloudLayer, world, worldBase, groups, effectBursts: [], quality, resize, setPixelRatio, render };
 }

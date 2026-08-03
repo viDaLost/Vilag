@@ -106,23 +106,29 @@ export function setupInput(sceneCtx, state, handlers) {
       }
     }
 
-    // 3. Check Resource nodes (Decor)
-    const decorHits = raycaster.intersectObjects(groups.decor.children, true);
-    if (decorHits.length) {
-        let obj = decorHits[0].object;
-        while (obj && !obj.userData.resourceId && obj.parent) obj = obj.parent;
-        const resourceId = obj?.userData?.resourceId;
-
-        if (resourceId) {
-            let resource = state.trees.find(t => t.id === resourceId) || state.rocks.find(r => r.id === resourceId);
-            if (resource) {
-                // Return resource interactions if needed, else ignore
-                return;
-            }
-        }
+    // 3. Check enemy camps
+    const campHits = raycaster.intersectObjects(groups.enemyCamps.children, true);
+    if (campHits.length) {
+      let campObject = campHits[0].object;
+      while (campObject && !campObject.userData.campId && campObject.parent) campObject = campObject.parent;
+      const camp = state.enemyCamps.find((candidate) => candidate.id === campObject?.userData?.campId);
+      if (camp) return handlers.onCamp?.(camp, e);
     }
 
-    // 4. Check Terrain
+    // 4. Check Resource nodes (Decor)
+    const decorHits = raycaster.intersectObjects(groups.decor.children, true);
+    if (decorHits.length) {
+      const hit = decorHits.find((candidate) => candidate.object?.userData?.resourceKind || candidate.object?.parent?.userData?.resourceKind);
+      if (hit) {
+        let obj = hit.object;
+        while (obj && !obj.userData.resourceKind && obj.parent) obj = obj.parent;
+        const list = obj?.userData?.resourceKind === 'tree' ? state.trees : state.rocks;
+        const resource = Number.isInteger(hit.instanceId) ? list[hit.instanceId] : null;
+        if (resource?.hp > 0) return handlers.onResource?.(resource, e);
+      }
+    }
+
+    // 5. Check Terrain
     const hits = raycaster.intersectObject(sceneCtx.groups.tiles, true);
     const terrainHit = hits.find(h => h.object.name === 'terrain-mesh');
 
@@ -133,4 +139,8 @@ export function setupInput(sceneCtx, state, handlers) {
     state.selected = null;
     handlers.onEmpty?.();
   });
+
+  renderer.domElement.addEventListener('pointercancel', () => {
+    state.dragging = false;
+  }, { passive: true });
 }

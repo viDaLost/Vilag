@@ -20,7 +20,15 @@ export default [
         requestAnimationFrame: "readonly",
         setTimeout: "readonly",
         addEventListener: "readonly",
-        queueMicrotask: "readonly"
+        queueMicrotask: "readonly",
+        navigator: "readonly",
+        getComputedStyle: "readonly",
+        process: "readonly",
+        URLSearchParams: "readonly",
+        URL: "readonly",
+        self: "readonly",
+        caches: "readonly",
+        fetch: "readonly"
       }
     },
     rules: {

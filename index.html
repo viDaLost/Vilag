@@ -3,97 +3,111 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Империя Востока 3D RTS</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-  <link rel="stylesheet" href="./styles.css?v=32" />
+  <meta name="theme-color" content="#15100a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="Полноценная браузерная 3D RTS о строительстве державы в долине Великой реки." />
+  <title>Империя Великой Реки — 3D RTS</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./assets/icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css?v=40" />
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-      "simplex-noise": "https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/+esm"
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/",
+      "simplex-noise": "./vendor/simplex-noise/simplex-noise.js"
     }
   }
   </script>
 </head>
 <body>
-  <div id="loading-screen">
-    <h1>⚔️ Империя Востока 3D RTS</h1>
+  <div id="loading-screen" role="status" aria-live="polite">
+    <div class="loading-emblem">⚔️</div>
+    <h1>Империя Великой Реки</h1>
+    <p>Стратегия о поселении, обороне и выборе наследия</p>
     <div class="loading-bar"><div id="loading-fill"></div></div>
-    <div id="loading-text">Подготовка живого мира…</div>
+    <div id="loading-text">Подготовка долины…</div>
   </div>
 
   <div id="vignette"></div>
-  <canvas id="game"></canvas>
+  <canvas id="game" aria-label="Трёхмерная карта игры"></canvas>
 
   <div id="ui-root">
-    <div id="top-bar" class="glass-panel"></div>
+    <div id="top-bar" class="glass-panel" aria-label="Ресурсы"></div>
 
     <div id="hud-strip">
       <div class="glass-panel info-card" id="kingdom-panel">
-        <div class="panel-title">Держава</div>
-        <div id="kingdom-text">Империя крепнет в реальном времени.</div>
+        <div class="eyebrow" id="chapter-label">I. Долина</div>
+        <div id="kingdom-text">Поселение пробуждается.</div>
         <div class="badge-row" id="kingdom-badges"></div>
       </div>
       <div class="glass-panel status-cluster" id="right-column">
-        <div class="mini-panel">⏱️ <span id="clock-label">06:00</span></div>
-        <div class="mini-panel">🌦️ <span id="weather-label">Ясно</span></div>
-        <div class="mini-panel">🏛️ <span id="era-label">Основание</span></div>
-        <div class="mini-panel">⚠️ <span id="threat-label">0</span></div>
+        <div class="mini-panel" title="Время">🕰️ <span id="clock-label">06:00</span></div>
+        <div class="mini-panel" title="Погода">🌦️ <span id="weather-label">Ясно</span></div>
+        <div class="mini-panel" title="Эпоха">🏛️ <span id="era-label">Основание</span></div>
+        <div class="mini-panel" title="Угроза">🏹 <span id="threat-label">0</span></div>
       </div>
     </div>
 
-    <div id=minimap-wrap class=glass-panel><canvas id=minimap></canvas></div>
-    <div id=side-panels>
+    <div id="command-banner" class="glass-panel hidden">
+      <span id="command-text">Выберите точку</span>
+      <button data-action="cancel-mode">Отмена</button>
+    </div>
+
+    <div id="minimap-wrap" class="glass-panel" aria-label="Миникарта"><canvas id="minimap"></canvas></div>
+    <div id="side-panels">
       <div class="glass-panel panel-block" id="objectives-panel">
-        <div class="panel-title">Цели</div>
+        <div class="panel-title">Текущая глава</div>
         <div id="objectives-list"></div>
       </div>
       <div class="glass-panel panel-block" id="selection-panel">
         <div class="panel-title" id="selection-title">Выбор</div>
-        <div id="selection-content">Коснись клетки, здания или юнита.</div>
+        <div id="selection-content">Коснитесь земли, здания, ресурса или юнита.</div>
       </div>
     </div>
 
     <div id="bottom-dock" class="glass-panel">
+      <div id="speed-controls" aria-label="Скорость игры">
+        <button class="speed-btn" data-speed="0" aria-label="Пауза">⏸</button>
+        <button class="speed-btn active" data-speed="1">×1</button>
+        <button class="speed-btn" data-speed="2">×2</button>
+        <button class="speed-btn" data-speed="4">×4</button>
+      </div>
       <div id="bottom-actions">
-        <button class="action-btn accent" data-action="focus-capital">🏰 Столица</button>
-        <button class="action-btn" data-action="build-menu">🛠️ Строить</button>
-        <button class="action-btn" data-action="train-menu">⚔️ Войска</button>
-        <button class="action-btn" data-action="research-menu">🔬 Знания</button>
-        <button class="action-btn" data-action="select-all-army">🛡️ Все войска</button>
-        <button class="action-btn wide" data-action="rules">❔ Правила</button>
+        <button class="action-btn accent" data-action="focus-capital">🏰<span>Столица</span></button>
+        <button class="action-btn" data-action="build-menu">🛠️<span>Строить</span></button>
+        <button class="action-btn" data-action="train-menu">⚔️<span>Войска</span></button>
+        <button class="action-btn" data-action="research-menu">🔬<span>Знания</span></button>
+        <button class="action-btn" data-action="select-all-army">🛡️<span>Армия</span></button>
+        <button class="action-btn" data-action="game-menu">☰<span>Меню</span></button>
       </div>
     </div>
 
-    <div id="context-drawer" class="glass-panel hidden">
+    <div id="context-drawer" class="glass-panel hidden" role="dialog" aria-modal="false">
       <div class="drawer-header">
         <div>
           <div class="panel-title" id="drawer-title">Меню</div>
           <div class="drawer-subtitle" id="drawer-subtitle">Команды</div>
         </div>
-        <button id="drawer-close">✕</button>
+        <button id="drawer-close" aria-label="Закрыть">✕</button>
       </div>
       <div id="drawer-body"></div>
     </div>
 
-    <div id="notifications"></div>
+    <div id="notifications" aria-live="polite"></div>
     <div id="construction-overlays"></div>
     <div id="health-overlays"></div>
 
     <div id="modal-overlay" class="hidden">
-      <div id="modal-window" class="glass-panel">
+      <div id="modal-window" class="glass-panel" role="dialog" aria-modal="true">
         <div class="drawer-header">
           <div>
             <div class="panel-title" id="modal-title">Справка</div>
             <div class="drawer-subtitle" id="modal-subtitle">Описание</div>
           </div>
-          <button id="modal-close">✕</button>
+          <button id="modal-close" aria-label="Закрыть">✕</button>
         </div>
         <div id="modal-body"></div>
         <div id="modal-actions"></div>
@@ -101,7 +115,6 @@
     </div>
   </div>
 
-
-  <script type="module" src="./src/main.js?v=32"></script>
+  <script type="module" src="./src/main.js?v=40"></script>
 </body>
 </html>

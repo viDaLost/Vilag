@@ -1,0 +1,20 @@
+{
+  "name": "Империя Великой Реки — 3D RTS",
+  "short_name": "Империя Реки",
+  "description": "Оффлайн-доступная браузерная стратегия о развитии поселения и защите долины.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080503",
+  "theme_color": "#15100a",
+  "icons": [
+    {
+      "src": "./assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

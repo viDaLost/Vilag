@@ -4,6 +4,12 @@ import { isTileInsideTerritory } from '../systems/world.js';
 import { fmt } from '../utils/helpers.js';
 import { $ } from './dom.js';
 
+const CAMP_NAMES = {
+  clans: 'Степные кланы',
+  iron: 'Железные мятежники',
+  beasts: 'Звериные всадники',
+};
+
 export function updateSelection(state) {
   const title = $('#selection-title');
   const body = $('#selection-content');
@@ -28,6 +34,20 @@ export function updateSelection(state) {
   if (sel.kind === 'unit') {
     const unit = sel.ref;
     title.textContent = UNITS[unit.type].name;
-    body.innerHTML = `<div>HP: <strong>${fmt(unit.hp)} / ${fmt(unit.maxHp)}</strong></div><div>Скорость: <strong>${fmt(unit.speed)}</strong></div><div>${unit.hostile ? 'Вражеский' : 'Свой'} юнит</div>${!unit.hostile ? '<div>Открой меню юнита: можно отправить в точку или назначить на работу.</div>' : ''}`;
+    const task = unit.type === 'worker'
+      ? (unit.assignedBuildingId ? 'Назначен на производство' : 'Ожидает работу')
+      : unit.hostile ? `Поведение: ${unit.aiRole || 'охрана'}` : 'Охраняет назначенный район';
+    body.innerHTML = `<div>HP: <strong>${fmt(unit.hp)} / ${fmt(unit.maxHp)}</strong></div><div>Броня: <strong>${fmt(unit.armor || 0)}</strong></div><div>${unit.hostile ? 'Вражеский' : 'Свой'} юнит</div><div>${task}</div>`;
+  }
+  if (sel.kind === 'resource') {
+    const resource = sel.ref;
+    title.textContent = resource.kind === 'tree' ? 'Дерево' : resource.isGold ? 'Золотоносная порода' : 'Каменная порода';
+    body.innerHTML = `<div>Запас: <strong>${fmt(resource.hp)} / ${fmt(resource.maxHp)}</strong></div><div>${resource.kind === 'tree' ? 'Лесопилка направит сюда рабочего.' : 'Шахта направит сюда рабочего.'}</div>`;
+  }
+  if (sel.kind === 'camp') {
+    const camp = sel.ref;
+    const garrison = state.units.filter((unit) => unit.hostile && !unit.dead && unit.homeCampId === camp.id).length;
+    title.textContent = CAMP_NAMES[camp.faction] || 'Лагерь налётчиков';
+    body.innerHTML = `<div>Прочность: <strong>${fmt(camp.hp)} / ${fmt(camp.maxHp)}</strong></div><div>Гарнизон: <strong>${garrison}</strong></div><div>Уровень угрозы: <strong>${fmt(camp.alert || 0)}</strong></div>`;
   }
 }

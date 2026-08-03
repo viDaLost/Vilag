@@ -1,21 +1,33 @@
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import { GAME_CONFIG } from '../config.js';
+import { clamp } from '../utils/helpers.js';
 
-// Continuous space mapping
+export function createSeededRandom(seed) {
+  let value = (Number(seed) || 1) >>> 0;
+  return () => {
+    value += 0x6D2B79F5;
+    let t = value;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function coordinateRandom(x, z, salt = 0) {
+  const value = Math.sin(x * 12.9898 + z * 78.233 + salt * 37.719) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 export function worldToGrid(x, z) {
   return {
-    gx: Math.floor(x / GAME_CONFIG.gridSize),
-    gz: Math.floor(z / GAME_CONFIG.gridSize)
+    gx: Math.round(x / GAME_CONFIG.gridSize),
+    gz: Math.round(z / GAME_CONFIG.gridSize),
   };
 }
 
 export function gridToWorld(gx, gz) {
-  return new THREE.Vector3(
-    gx * GAME_CONFIG.gridSize + GAME_CONFIG.gridSize / 2,
-    0,
-    gz * GAME_CONFIG.gridSize + GAME_CONFIG.gridSize / 2
-  );
+  return new THREE.Vector3(gx * GAME_CONFIG.gridSize, 0, gz * GAME_CONFIG.gridSize);
 }
 
 function biomeNoise(noise2D, x, z, scale, ox = 0, oy = 0) {
@@ -23,98 +35,131 @@ function biomeNoise(noise2D, x, z, scale, ox = 0, oy = 0) {
 }
 
 export function generateWorld(state) {
-  const noise2D = createNoise2D();
-  const radius = GAME_CONFIG.mapRadius * GAME_CONFIG.hexSize * 2.5; // Scale mapping correctly to new size
+  const random = createSeededRandom(state.worldSeed);
+  const noise2D = createNoise2D(random);
+  const riverAngle = -.38 + random() * .76;
+  const riverDir = new THREE.Vector2(Math.cos(riverAngle), Math.sin(riverAngle));
+  const riverNormal = new THREE.Vector2(-riverDir.y, riverDir.x);
 
   state.worldConfig = {
-    radius,
+    seed: state.worldSeed,
+    radius: GAME_CONFIG.worldRadius,
     noise2D,
-    riverAngle: noise2D(11.4, -7.2) * 0.75 + 0.35
+    riverAngle,
+    riverDir,
+    riverNormal,
+    fords: [-22 + random() * 4, 2 + random() * 5, 24 + random() * 3],
   };
-
-  state.worldConfig.riverDir = new THREE.Vector2(Math.cos(state.worldConfig.riverAngle), Math.sin(state.worldConfig.riverAngle));
-  state.worldConfig.riverNormal = new THREE.Vector2(-state.worldConfig.riverDir.y, state.worldConfig.riverDir.x);
 }
 
 export function sampleTerrain(state, x, z) {
-  if (!state.worldConfig) return { type: 'grass', height: 0, steepness: 0, elevation: 0 };
+  if (!state.worldConfig) return { type: 'grass', height: 0, steepness: 0, elevation: 0, riverDistance: 99, noise: 0 };
 
-  const { radius, noise2D, riverDir, riverNormal } = state.worldConfig;
-
+  const { radius, noise2D, riverDir, riverNormal, fords } = state.worldConfig;
   const d = Math.hypot(x, z);
   const edge = d / radius;
-  const centerSafe = Math.max(0, 1 - d / (radius * 0.25));
-
-  const qx = x / (GAME_CONFIG.hexSize * 1.5);
-  const qz = z / (GAME_CONFIG.hexSize * Math.sqrt(3));
-
-  const moisture = biomeNoise(noise2D, qx, qz, 0.075, -41, 13);
-  const elevation = biomeNoise(noise2D, qx, qz, 0.055, 88, -23) * 0.72 + biomeNoise(noise2D, qx, qz, 0.12, 9, 61) * 0.28;
-  const detail = biomeNoise(noise2D, qx, qz, 0.24, 4, -7);
-  const coast = noise2D(x * 0.035 + 19, z * 0.035 - 7) * 0.12 + noise2D(x * 0.085, z * 0.085) * 0.045;
+  const nx = x / radius;
+  const nz = z / radius;
+  const detail = biomeNoise(noise2D, x, z, .115, 4, -7);
+  const broad = biomeNoise(noise2D, x, z, .025, 88, -23);
+  const ridges = Math.abs(biomeNoise(noise2D, x, z, .052, 9, 61));
+  const moisture = biomeNoise(noise2D, x, z, .038, -41, 13) + (nz < -.1 ? .13 : 0);
+  const coastNoise = biomeNoise(noise2D, x, z, .07, 19, -7) * .035;
 
   const worldPos = new THREE.Vector2(x, z);
   const along = worldPos.dot(riverDir);
-  const meander = Math.sin(along * 0.105) * 2.9 + noise2D(qx * 0.16 + 12, qz * 0.16 - 2) * 2.2;
-  const across = Math.abs(worldPos.dot(riverNormal) + meander);
-  const riverWidth = 3.5 + Math.max(0, 1 - Math.abs(along) / (radius * 0.95)) * 2.5;
+  const meander = Math.sin(along * .115) * 2.25 + noise2D(along * .028 + 12, -2) * 1.5;
+  const signedAcross = worldPos.dot(riverNormal) + meander;
+  const across = Math.abs(signedAcross);
+  const riverWidth = 2.65 + Math.max(0, 1 - Math.abs(along) / radius) * 1.45;
+  const atFord = fords.some((ford) => Math.abs(along - ford) < 2.1);
 
-  const lakeA = Math.hypot(x - radius * 0.28, z + radius * 0.18) < 12.0 + noise2D(qx * .2, qz * .2) * 3.0;
-  const lakeB = Math.hypot(x + radius * 0.38, z - radius * 0.22) < 9.0 + noise2D(qx * .23 - 3, qz * .23 + 8) * 2.0;
+  const centralBasin = Math.max(0, 1 - d / 15);
+  const mountainBias = Math.max(0, nx * .65 + nz * .35 + .1);
+  let elevation = broad * .62 + ridges * .42 + mountainBias * .5 - centralBasin * .72;
+  elevation -= Math.max(0, edge - .72) * .32;
 
   let type = 'grass';
-  const finalElevation = elevation - centerSafe * 0.9 - Math.max(0, edge - 0.72) * 0.6;
-  let height = 0.12 + detail * 0.035 + finalElevation;
-  const seaLine = 0.88 + coast;
-  const beachLine = 0.82 + coast;
+  let height = .12 + elevation * .7 + detail * .06;
+  const coastLine = .91 + coastNoise;
+  const lakeDistance = Math.hypot(x + radius * .31, z - radius * .22);
+  const isLake = lakeDistance < 6.8 + detail * 1.2;
 
-  if ((edge > seaLine && centerSafe < 0.02) || lakeA || lakeB) {
+  if (edge > coastLine || isLake) {
     type = 'water';
-    height = GAME_CONFIG.terrain.waterLevel - 0.28 + detail * 0.025;
-  } else if (edge > beachLine && centerSafe < 0.02) {
-    type = 'fertile';
-    height = 0.02 + detail * 0.025 + Math.max(0, finalElevation);
-  } else if (across < riverWidth * 0.42 && centerSafe < 0.75) {
+    height = GAME_CONFIG.terrain.waterLevel - .3 + detail * .025;
+  } else if (across < riverWidth * .48 && !atFord && d > 7) {
     type = 'water';
-    height = GAME_CONFIG.terrain.waterLevel - 0.18 + detail * 0.015;
-  } else if (across < riverWidth * 1.28) {
+    height = GAME_CONFIG.terrain.waterLevel - .2 + detail * .02;
+  } else if (across < riverWidth * 1.45 || (atFord && across < riverWidth * .72)) {
     type = 'river';
-    height = 0.04 + detail * 0.018 + Math.max(0, finalElevation * 0.2);
-  } else if (finalElevation > 0.48 && d > 15.0) {
+    height = atFord && across < riverWidth * .72
+      ? -.03 + detail * .015
+      : .04 + Math.max(0, elevation * .18) + detail * .02;
+  } else if (elevation > .68 || (mountainBias > .48 && elevation > .38)) {
     type = 'rock';
-    height = 0.78 + finalElevation * 0.58 + detail * 0.08;
-  } else if (finalElevation > 0.26 && d > 10.0) {
+    height = .72 + elevation * .72 + detail * .1;
+  } else if (elevation > .36 || (ridges > .67 && d > 13)) {
     type = 'hill';
-    height = 0.36 + finalElevation * 0.24 + detail * 0.045;
-  } else if (moisture > 0.18 && d > 8.0) {
+    height = .34 + elevation * .38 + detail * .06;
+  } else if (moisture > .18 && d > 9 && nx < .42) {
     type = 'forest';
-    height = 0.16 + detail * 0.035 + Math.max(0, finalElevation * 0.4);
-  } else if (moisture < -0.26 || across < riverWidth * 2.15) {
+    height = .14 + Math.max(0, elevation * .38) + detail * .035;
+  } else if (across < riverWidth * 2.7 || moisture < -.23 || (nx < -.28 && nz > .05)) {
     type = 'fertile';
-    height = 0.10 + detail * 0.025 + Math.max(0, finalElevation * 0.5);
+    height = .09 + Math.max(0, elevation * .32) + detail * .025;
   }
 
-  if (d < 12.0 && d > 5.0 && type === 'grass' && noise2D(qx * 0.45, qz * 0.45) > 0.62) {
+  const sacredA = Math.hypot(x - 11, z + 12) < 4.2;
+  const sacredB = Math.hypot(x + 17, z - 8) < 3.8;
+  if ((sacredA || sacredB) && type !== 'water' && type !== 'rock') {
     type = 'sacred';
-    height = 0.16 + Math.max(0, finalElevation * 0.5);
+    height = .16 + Math.max(0, elevation * .25);
   }
 
-  // Flatten under buildings
-  if (state.buildings) {
-      for (const building of state.buildings) {
-          const dx = x - building.pos.x;
-          const dz = z - building.pos.z;
-          const dist = Math.hypot(dx, dz);
-          if (dist < building.blockRadius * 1.5) {
-              const blend = Math.max(0, 1 - dist / (building.blockRadius * 1.5));
-              height = height * (1 - blend) + building.surfaceY * blend;
-          }
-      }
+  if (d < 7.5) {
+    type = 'grass';
+    const blend = clamp(d / 7.5, 0, 1);
+    height = height * blend + .08 * (1 - blend);
   }
 
-  return { type, height, moisture, elevation: finalElevation, riverDistance: across, noise: detail };
+  return {
+    type,
+    height,
+    moisture,
+    elevation,
+    riverDistance: across,
+    riverAlong: along,
+    isFord: atFord,
+    noise: detail,
+  };
 }
 
 export function isTileInsideTerritory(state, x, z) {
   return Math.hypot(x, z) <= state.territoryRadius;
+}
+
+export function isInsideWorld(state, x, z, margin = 0) {
+  return Math.hypot(x, z) <= (state.worldConfig?.radius || GAME_CONFIG.worldRadius) - margin;
+}
+
+export function terrainMoveCost(state, x, z) {
+  const terrain = sampleTerrain(state, x, z);
+  if (terrain.type === 'water') return Infinity;
+  return ({ river: 1.18, rock: 1.6, hill: 1.35, forest: 1.22, fertile: .96, sacred: .94 })[terrain.type] || 1;
+}
+
+export function findNearestWalkable(state, x, z, searchRadius = 8) {
+  const direct = sampleTerrain(state, x, z);
+  if (direct.type !== 'water' && isInsideWorld(state, x, z, 1)) return new THREE.Vector3(x, direct.height, z);
+  for (let radius = GAME_CONFIG.gridSize; radius <= searchRadius; radius += GAME_CONFIG.gridSize) {
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const px = x + Math.cos(angle) * radius;
+      const pz = z + Math.sin(angle) * radius;
+      const terrain = sampleTerrain(state, px, pz);
+      if (terrain.type !== 'water' && isInsideWorld(state, px, pz, 1)) return new THREE.Vector3(px, terrain.height, pz);
+    }
+  }
+  return null;
 }
